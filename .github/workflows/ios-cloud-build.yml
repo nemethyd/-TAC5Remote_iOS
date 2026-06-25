@@ -38,7 +38,9 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew untap aws/tap || true
+          brew install xcodegen
 
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
