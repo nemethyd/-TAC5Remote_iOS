@@ -28,7 +28,9 @@ jobs:
       - name: Install XcodeGen
         run: |
           brew untap aws/tap || true
-          brew untap azure/bicep || true
+          if brew tap | grep -q '^azure/bicep$'; then
+            brew trust azure/bicep || true
+          fi
           brew install xcodegen
 
       - name: Generate Xcode project
