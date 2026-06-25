@@ -57,6 +57,8 @@ jobs:
             <string>automatic</string>
             <key>teamID</key>
             <string>8Q774J3K2P</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
             <key>stripSwiftSymbols</key>
             <true/>
             <key>uploadSymbols</key>
@@ -78,6 +80,9 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath "$ARCHIVE_PATH" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            DEVELOPMENT_TEAM=8Q774J3K2P \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_STYLE=Automatic \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$API_PRIVATE_KEYS_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
             -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
