@@ -63,7 +63,7 @@ final class ConnectionViewModel: ObservableObject {
             }
         } catch {
             self.statusText = "Connect/read failed: \(error.localizedDescription)"
-            client.disconnect()
+            await client.disconnect()
             self.isConnected = false
         }
 
@@ -96,8 +96,8 @@ final class ConnectionViewModel: ObservableObject {
         await syncSnapshotToCloud(snapshot: snapshot, trigger: "manual")
     }
 
-    func disconnect() {
-        client?.disconnect()
+    func disconnect() async {
+        await client?.disconnect()
         client = nil
         repository = nil
         isConnected = false
@@ -144,7 +144,7 @@ struct ContentView: View {
 
                     Button(viewModel.isConnected ? "Disconnect" : "Connect") {
                         if viewModel.isConnected {
-                            viewModel.disconnect()
+                            Task { await viewModel.disconnect() }
                         } else {
                             Task { await viewModel.connect() }
                         }
@@ -184,12 +184,12 @@ struct ContentView: View {
                 }
 
                 Section("Telemetry") {
-                    LabeledContent("T1", valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
-                    LabeledContent("T2", valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
-                    LabeledContent("T3", valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
-                    LabeledContent("T4", valueText(viewModel.snapshot.t4Celsius, suffix: " C"))
-                    LabeledContent("Supply", valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
-                    LabeledContent("Exhaust", valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
+                    LabeledContent("T1", value: valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
+                    LabeledContent("T2", value: valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
+                    LabeledContent("T3", value: valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
+                    LabeledContent("T4", value: valueText(viewModel.snapshot.t4Celsius, suffix: " C"))
+                    LabeledContent("Supply", value: valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
+                    LabeledContent("Exhaust", value: valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
                 }
             }
             .navigationTitle("TAC5 Remote")
