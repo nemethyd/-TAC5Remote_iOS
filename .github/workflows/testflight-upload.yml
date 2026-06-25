@@ -9,7 +9,7 @@ permissions:
 jobs:
   upload_testflight:
     name: Build And Upload To TestFlight
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 45
     env:
       APP_SCHEME: TAC5Remote_iOS_App
@@ -17,6 +17,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: Set temporary paths
         run: |
