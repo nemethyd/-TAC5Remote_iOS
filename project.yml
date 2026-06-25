@@ -16,6 +16,10 @@ targets:
         product: TAC5Core
     settings:
       base:
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_TEAM: 8Q774J3K2P
+        MARKETING_VERSION: 1.0
         PRODUCT_BUNDLE_IDENTIFIER: hu.moderato.tac5remote.ios
         SWIFT_VERSION: 5.10
         GENERATE_INFOPLIST_FILE: YES

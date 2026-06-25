@@ -39,6 +39,11 @@ The workflow runs on GitHub-hosted macOS runners:
 
 This is enough for build validation, but not for reading a device that only exists on your local network.
 
+## TestFlight
+
+- Manual TestFlight workflow: `.github/workflows/testflight-upload.yml`
+- Setup notes: `docs/TESTFLIGHT_SETUP.md`
+
 ## Cloud sync payload
 
 The app sends JSON with:
