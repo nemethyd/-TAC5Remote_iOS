@@ -1,80 +1,61 @@
-# TAC5 Remote iOS (New Client)
+# TAC5 Remote iOS
 
-This workspace contains a clean iOS-oriented foundation for a modern TAC5 client.
+Modern iOS client foundation for TAC5-compatible units over Modbus TCP.
 
-## Goal
+## What this repo is
 
-Build a modern, stable app for TAC5-compatible units over Modbus TCP (default port 502), with a cleaner UX than legacy vendor apps.
+- `TAC5Core` contains the protocol and data model layer.
+- `App/Sources` contains the SwiftUI iOS app shell.
+- `project.yml` is the XcodeGen spec for generating the iOS project.
+- `.github/workflows/ios-cloud-build.yml` runs the cloud build on macOS runners.
 
-## Scope (MVP)
+## Current status
 
-- Device discovery by manual host entry (IP + port)
-- Safe connect/disconnect
-- Read core telemetry (airflow, T1/T2/T3 and other available registers)
-- Visualization screen (unit status + key values)
-- Basic setup screen (read/write selected writable registers)
-- Error handling and reconnect strategy
+- Modbus TCP connect/read/disconnect flow is implemented in `TAC5Core`.
+- The app can read a snapshot and display telemetry placeholders.
+- Cloud upload can be enabled from the UI and sends snapshot JSON to an HTTPS endpoint.
+- The repository is set up for GitHub Actions based cloud build.
 
-## Architecture
+## Scope
 
-- `TAC5Core` Swift package for protocol and business logic
-- iOS app layer (SwiftUI) for UI and state management
-- Register map kept external so model variants are easier to support
+- Manual host, port, and unit ID entry.
+- Read telemetry values from the unit.
+- Basic connect/disconnect and refresh flow.
+- Optional cloud sync for snapshots.
+- Later: write operations, diagnostics, planner screens, and richer device handling.
 
-## Naming and Bundle ID
+## Local development
 
-- Domain owner: `moderato.hu`
-- Recommended app name: `TAC5 Remote`
-- Recommended bundle identifier: `hu.moderato.tac5remote`
-- Optional split by targets:
-  - iOS app: `hu.moderato.tac5remote.ios`
-  - Internal test app (if needed): `hu.moderato.tac5remote.internal`
+1. Generate the Xcode project from the spec with `brew install xcodegen` and `xcodegen generate`.
+2. Open `TAC5Remote_iOS_App.xcodeproj` in Xcode.
+3. Run the `TAC5Remote_iOS_App` scheme on a simulator or device.
 
-## Important
+## Cloud build
 
-- Register addresses and writable capabilities must be validated on real hardware.
-- Do not assume all TAC5 variants expose the same register set.
-- Start read-only, then enable write operations after validation.
+The workflow runs on GitHub-hosted macOS runners:
 
-## Next Build Steps
+- `swift_package_tests`: executes `swift test`
+- `ios_app_build`: generates the Xcode project and runs `xcodebuild`
 
-1. Generate the iOS app project from `project.yml`:
-   - `brew install xcodegen`
-   - `xcodegen generate`
-2. Open `TAC5Remote_iOS_App.xcodeproj` and run scheme `TAC5Remote_iOS_App`.
-3. Replace mock connect flow with real Modbus transport (`Network.framework`).
-4. Fill register map from validated TAC5 documentation/device tests.
-5. Add integration tests against a Modbus simulator.
+This is enough for build validation, but not for reading a device that only exists on your local network.
 
-## Included Minimal App Scaffold
+## Cloud sync payload
 
-- SwiftUI app sources in `App/Sources`
-- XcodeGen project spec in `project.yml`
-- Local package dependency wiring to `TAC5Core`
-- Real connect/read/disconnect flow using `ModbusTCPClient`
+The app sends JSON with:
 
-## Current Status
+- `timestamp` in ISO-8601 format
+- `source` containing `host`, `unitId`, and `trigger`
+- `snapshot` with the telemetry fields (`t1` to `t4`, supply and exhaust airflow)
 
-- `ModbusTCPClient` now uses `Network.framework` transport for Modbus TCP exchange.
-- App `Connect` executes a real register read (`TAC5Repository.readSnapshot()`).
-- `Refresh` re-reads telemetry from the connected unit.
-- Optional cloud upload flow added in app UI (`Cloud` section):
-  - enable/disable cloud sync
-  - set endpoint URL
-  - set optional API key (`Authorization: Bearer <key>`)
-  - run manual `Sync Now`
+## Important notes
 
-## Cloud Payload (App -> Cloud)
+- TAC5 register addresses and scaling must still be validated on real hardware.
+- Not every TAC5 variant exposes the same register set.
+- Start with read-only behavior and enable writes only after validation.
 
-The app sends JSON payload with:
+## Repository layout
 
-- `timestamp` (ISO-8601)
-- `source` (`host`, `unitId`, `trigger`)
-- `snapshot` (`t1/t2/t3/t4`, `supply/exhaust airflow`)
-
-## Cloud Build
-
-- GitHub Actions workflow: `.github/workflows/ios-cloud-build.yml`
-- Jobs:
-  - `swift_package_tests`: runs `swift test`
-  - `ios_app_build`: generates Xcode project and runs `xcodebuild`
+- `App/` - iOS app sources
+- `Sources/TAC5Core/` - Modbus client and model logic
+- `Tests/` - unit tests for the package
+- `docs/` - project notes and register map templates

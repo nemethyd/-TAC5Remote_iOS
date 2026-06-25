@@ -4,11 +4,20 @@ on:
   push:
     branches: ["main", "master"]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-cloud-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   swift_package_tests:
     name: Swift Package Tests
     runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,12 +26,13 @@ jobs:
         run: swift --version
 
       - name: Run package tests
-        run: swift test
+        run: swift test --parallel
 
   ios_app_build:
     name: iOS App Build
     runs-on: macos-15
     needs: swift_package_tests
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +41,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: xcodegen generate --spec project.yml
 
       - name: Build iOS app
         run: |
