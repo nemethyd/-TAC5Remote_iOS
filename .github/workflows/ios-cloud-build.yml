@@ -1,0 +1,43 @@
+name: iOS Cloud Build
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  swift_package_tests:
+    name: Swift Package Tests
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Run package tests
+        run: swift test
+
+  ios_app_build:
+    name: iOS App Build
+    runs-on: macos-15
+    needs: swift_package_tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build iOS app
+        run: |
+          xcodebuild \
+            -project TAC5Remote_iOS_App.xcodeproj \
+            -scheme TAC5Remote_iOS_App \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            build

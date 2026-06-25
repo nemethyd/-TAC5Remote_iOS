@@ -1,0 +1,29 @@
+name: TAC5Remote_iOS_App
+options:
+  minimumXcodeGenVersion: 2.39.0
+packages:
+  TAC5Core:
+    path: .
+targets:
+  TAC5Remote_iOS_App:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: App/Sources
+    dependencies:
+      - package: TAC5Core
+        product: TAC5Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: hu.moderato.tac5remote.ios
+        SWIFT_VERSION: 5.10
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TAC5 Remote
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+schemes:
+  TAC5Remote_iOS_App:
+    build:
+      targets:
+        TAC5Remote_iOS_App: all

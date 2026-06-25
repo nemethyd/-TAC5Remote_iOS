@@ -1,0 +1,12 @@
+key,address,type,access,scale,unit,notes
+T1,41001,int16,ro,0.1,C,placeholder
+T2,41002,int16,ro,0.1,C,placeholder
+T3,41003,int16,ro,0.1,C,placeholder
+T4,41004,int16,ro,0.1,C,placeholder
+SUPPLY_AIRFLOW,41010,uint16,ro,1,m3_h,placeholder
+EXHAUST_AIRFLOW,41011,uint16,ro,1,m3_h,placeholder
+WORKING_MODE,42001,uint16,rw,1,enum,placeholder
+RATIO_EXH_SUP,42002,uint16,rw,0.01,ratio,placeholder
+AIRFLOW_I,42003,uint16,rw,1,m3_h,placeholder
+AIRFLOW_II,42004,uint16,rw,1,m3_h,placeholder
+AIRFLOW_III,42005,uint16,rw,1,m3_h,placeholder
