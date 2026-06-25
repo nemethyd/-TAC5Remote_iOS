@@ -150,7 +150,7 @@ public actor ModbusTCPClient {
 
     private func send(data: Data, on connection: NWConnection) async throws {
         try await withTimeout(config.timeoutSeconds) {
-            try await withCheckedThrowingContinuation { continuation in
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 connection.send(content: data, completion: .contentProcessed { error in
                     if let error {
                         continuation.resume(throwing: ModbusError.connectionFailed(String(describing: error)))
@@ -167,8 +167,9 @@ public actor ModbusTCPClient {
         buffer.reserveCapacity(count)
 
         while buffer.count < count {
+            let remaining = count - buffer.count
             let chunk = try await withTimeout(config.timeoutSeconds) {
-                try await receiveChunk(maxLength: count - buffer.count, on: connection)
+                try await self.receiveChunk(maxLength: remaining, on: connection)
             }
 
             if chunk.isEmpty {
