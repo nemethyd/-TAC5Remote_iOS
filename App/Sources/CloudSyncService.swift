@@ -84,6 +84,7 @@ private struct SnapshotPayload: Codable {
     let t1Celsius: Double?
     let t2Celsius: Double?
     let t3Celsius: Double?
+    let t7Celsius: Double?
     let t4Celsius: Double?
     let supplyAirflowM3h: Double?
     let exhaustAirflowM3h: Double?
@@ -92,7 +93,8 @@ private struct SnapshotPayload: Codable {
         t1Celsius = snapshot.t1Celsius
         t2Celsius = snapshot.t2Celsius
         t3Celsius = snapshot.t3Celsius
-        t4Celsius = snapshot.t4Celsius
+        t7Celsius = snapshot.t7Celsius
+        t4Celsius = snapshot.t7Celsius
         supplyAirflowM3h = snapshot.supplyAirflowM3h
         exhaustAirflowM3h = snapshot.exhaustAirflowM3h
     }

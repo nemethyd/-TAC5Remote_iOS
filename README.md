@@ -50,7 +50,7 @@ The app sends JSON with:
 
 - `timestamp` in ISO-8601 format
 - `source` containing `host`, `unitId`, and `trigger`
-- `snapshot` with the telemetry fields (`t1` to `t4`, supply and exhaust airflow)
+- `snapshot` with the telemetry fields (`t1`, `t2`, `t3`, `t7`, supply and exhaust airflow)
 
 ## Important notes
 

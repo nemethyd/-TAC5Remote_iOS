@@ -187,7 +187,7 @@ struct ContentView: View {
                     LabeledContent("T1", value: valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
                     LabeledContent("T2", value: valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
                     LabeledContent("T3", value: valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
-                    LabeledContent("T4", value: valueText(viewModel.snapshot.t4Celsius, suffix: " C"))
+                    LabeledContent("T7", value: valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
                     LabeledContent("Supply", value: valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
                     LabeledContent("Exhaust", value: valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
                 }
