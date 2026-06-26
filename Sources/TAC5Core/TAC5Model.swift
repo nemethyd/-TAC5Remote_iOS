@@ -32,13 +32,13 @@ public struct TAC5Snapshot: Sendable {
 }
 
 public enum TAC5Register: UInt16, CaseIterable {
-    // Modbus PDU uses zero-based register offsets (not 4xxxx notation).
-    case t1 = 0
-    case t2 = 1
-    case t3 = 2
-    case t7 = 6
-    case supplyAirflow = 9
-    case exhaustAirflow = 10
+    // Validated against live Mural dump (zero-based Modbus offsets).
+    case t7 = 8
+    case supplyAirflow = 64
+    case exhaustAirflow = 72
+    case t1 = 154
+    case t2 = 155
+    case t3 = 156
 }
 
 public struct TAC5Codec {
@@ -64,21 +64,36 @@ public actor TAC5Repository {
     }
 
     public func readSnapshot() async throws -> TAC5Snapshot {
-        let regs = try await client.readHoldingRegisters(startAddress: TAC5Register.t1.rawValue, quantity: 11)
+        // Fields are not contiguous, so read in small targeted blocks.
+        let t7Raw = try await readRegister(TAC5Register.t7.rawValue)
+        let supplyRaw = try await readRegister(TAC5Register.supplyAirflow.rawValue)
+        let exhaustRaw = try await readRegister(TAC5Register.exhaustAirflow.rawValue)
+        let tempsRaw = try await client.readHoldingRegisters(startAddress: TAC5Register.t1.rawValue, quantity: 3)
 
-        func reg(_ r: TAC5Register) -> UInt16? {
-            let index = Int(r.rawValue - TAC5Register.t1.rawValue)
-            guard index >= 0, index < regs.count else { return nil }
-            return regs[index]
-        }
+        let t1Raw = tempsRaw[safe: 0]
+        let t2Raw = tempsRaw[safe: 1]
+        let t3Raw = tempsRaw[safe: 2]
 
         return TAC5Snapshot(
-            t1Celsius: reg(.t1).map(codec.decodeTemperature),
-            t2Celsius: reg(.t2).map(codec.decodeTemperature),
-            t3Celsius: reg(.t3).map(codec.decodeTemperature),
-            t7Celsius: reg(.t7).map(codec.decodeTemperature),
-            supplyAirflowM3h: reg(.supplyAirflow).map(codec.decodeAirflow),
-            exhaustAirflowM3h: reg(.exhaustAirflow).map(codec.decodeAirflow)
+            t1Celsius: t1Raw.map(codec.decodeTemperature),
+            t2Celsius: t2Raw.map(codec.decodeTemperature),
+            t3Celsius: t3Raw.map(codec.decodeTemperature),
+            // T7 is exposed with 0.01 scaling on this unit family.
+            t7Celsius: t7Raw.map { Double(Int16(bitPattern: $0)) / 100.0 },
+            supplyAirflowM3h: supplyRaw.map(codec.decodeAirflow),
+            exhaustAirflowM3h: exhaustRaw.map(codec.decodeAirflow)
         )
+    }
+
+    private func readRegister(_ address: UInt16) async throws -> UInt16? {
+        let regs = try await client.readHoldingRegisters(startAddress: address, quantity: 1)
+        return regs.first
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        guard indices.contains(index) else { return nil }
+        return self[index]
     }
 }
