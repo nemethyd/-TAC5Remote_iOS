@@ -26,6 +26,8 @@
   <true/>
   <key>NSLocalNetworkUsageDescription</key>
   <string>The app connects to your TAC5 unit on your local network (for example 192.168.10.80) via Modbus TCP.</string>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
   <key>UIApplicationSupportsIndirectInputEvents</key>
   <true/>
   <key>UILaunchScreen</key>
