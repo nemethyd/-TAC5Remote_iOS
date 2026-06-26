@@ -4,7 +4,7 @@ import TAC5Core
 
 @MainActor
 final class ConnectionViewModel: ObservableObject {
-    @Published var host = "192.168.1.50"
+    @Published var host = "192.168.10.80"
     @Published var port = "502"
     @Published var unitId = "1"
     @Published var statusText = "Disconnected"
@@ -38,6 +38,7 @@ final class ConnectionViewModel: ObservableObject {
         }
 
         isBusy = true
+        defer { isBusy = false }
         statusText = "Connecting..."
 
         let config = ModbusTCPConfig(
@@ -51,7 +52,9 @@ final class ConnectionViewModel: ObservableObject {
         let repository = TAC5Repository(client: client)
 
         do {
-            let freshSnapshot = try await repository.readSnapshot()
+            let freshSnapshot = try await withConnectTimeout(seconds: 8) {
+                try await repository.readSnapshot()
+            }
             self.client = client
             self.repository = repository
             self.snapshot = freshSnapshot
@@ -66,8 +69,6 @@ final class ConnectionViewModel: ObservableObject {
             await client.disconnect()
             self.isConnected = false
         }
-
-        isBusy = false
     }
 
     func refresh() async {
@@ -125,10 +126,35 @@ final class ConnectionViewModel: ObservableObject {
             cloudStatusText = "Cloud sync failed: \(error.localizedDescription)"
         }
     }
+
+    private func withConnectTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw ModbusError.timeout
+            }
+
+            guard let result = try await group.next() else {
+                throw ModbusError.timeout
+            }
+            group.cancelAll()
+            return result
+        }
+    }
 }
 
 struct ContentView: View {
     @StateObject private var viewModel = ConnectionViewModel()
+
+    private var buildInfo: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "v\(v) (\(b))"
+    }
 
     var body: some View {
         NavigationStack {
@@ -190,6 +216,11 @@ struct ContentView: View {
                     LabeledContent("T7", value: valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
                     LabeledContent("Supply", value: valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
                     LabeledContent("Exhaust", value: valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
+                }
+
+                Section("App") {
+                    LabeledContent("Build", value: buildInfo)
+                    LabeledContent("Sensor mapping", value: "T1/T2/T3/T7")
                 }
             }
             .navigationTitle("TAC5 Remote")
