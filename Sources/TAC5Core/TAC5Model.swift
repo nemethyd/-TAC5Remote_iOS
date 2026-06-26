@@ -50,8 +50,8 @@ public struct TAC5Codec {
     }
 
     public func decodeAirflow(_ registerValue: UInt16) -> Double {
-        // Validated against the live unit: the raw register is half the displayed m3/h value.
-        return Double(registerValue) * 2.0
+        // Raw airflow register value in m3/h.
+        return Double(registerValue)
     }
 }
 
