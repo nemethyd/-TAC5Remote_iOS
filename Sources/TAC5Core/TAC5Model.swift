@@ -50,8 +50,8 @@ public struct TAC5Codec {
     }
 
     public func decodeAirflow(_ registerValue: UInt16) -> Double {
-        // Placeholder direct value in m3/h. Verify against target unit.
-        return Double(registerValue)
+        // Validated against the live unit: the raw register is half the displayed m3/h value.
+        return Double(registerValue) * 2.0
     }
 }
 
