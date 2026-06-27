@@ -17,7 +17,7 @@ jobs:
   upload_testflight:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Upload Artifact To TestFlight
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - name: Select latest Xcode
@@ -31,7 +31,7 @@ jobs:
           echo "API_PRIVATE_KEYS_DIR=$RUNNER_TEMP/private_keys" >> "$GITHUB_ENV"
 
       - name: Download IPA artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: testflight-ipa-${{ github.event.workflow_run.head_sha }}
           run-id: ${{ github.event.workflow_run.id }}
