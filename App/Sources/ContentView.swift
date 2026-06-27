@@ -641,7 +641,7 @@ private struct SettingsView: View {
                 Spacer()
                 if viewModel.operationMode == mode {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.accent)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
         }
