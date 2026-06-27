@@ -36,10 +36,26 @@ public enum TAC5Register: UInt16, CaseIterable {
     case t7 = 8
     case supplyAirflow = 64
     case exhaustAirflow = 72
+    case presetWriteTrigger = 199
+    case presetState = 202
     case t1 = 154
     case t2 = 155
     case t3 = 156
     case boostEnable = 227
+}
+
+public enum TAC5Preset: UInt16, CaseIterable, Sendable {
+    case k1 = 1
+    case k2 = 2
+    case k3 = 3
+
+    public var label: String {
+        switch self {
+        case .k1: return "K1"
+        case .k2: return "K2"
+        case .k3: return "K3"
+        }
+    }
 }
 
 public struct TAC5Codec {
@@ -93,9 +109,22 @@ public actor TAC5Repository {
         return raw == 1
     }
 
+    public func readPreset() async throws -> TAC5Preset? {
+        guard let raw = try await readRegister(TAC5Register.presetState.rawValue) else {
+            return nil
+        }
+        return TAC5Preset(rawValue: raw)
+    }
+
     public func writeBoostEnabled(_ enabled: Bool) async throws {
         let value: UInt16 = enabled ? 1 : 0
         try await client.writeSingleRegister(address: TAC5Register.boostEnable.rawValue, value: value)
+    }
+
+    public func writePreset(_ preset: TAC5Preset) async throws {
+        // Observed device behavior: each K preset change writes 199=0, then 202=<preset>.
+        try await client.writeSingleRegister(address: TAC5Register.presetWriteTrigger.rawValue, value: 0)
+        try await client.writeSingleRegister(address: TAC5Register.presetState.rawValue, value: preset.rawValue)
     }
 
     private func readRegister(_ address: UInt16) async throws -> UInt16? {

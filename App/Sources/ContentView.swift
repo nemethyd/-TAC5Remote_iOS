@@ -1,6 +1,9 @@
 import SwiftUI
 import Foundation
 import TAC5Core
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 final class ConnectionViewModel: ObservableObject {
@@ -10,9 +13,11 @@ final class ConnectionViewModel: ObservableObject {
     @Published var isConnected = false
     @Published var isBusy = false
     @Published var boostEnabled = false
+    @Published var selectedPreset: TAC5Preset = .k1
 
     private var client: ModbusTCPClient?
     private var repository: TAC5Repository?
+    private var isRefreshing = false
 
     func connect() async {
         guard !isBusy else { return }
@@ -43,11 +48,15 @@ final class ConnectionViewModel: ObservableObject {
                 try await repository.readSnapshot()
             }
             let boostState = try await repository.readBoostEnabled()
+            let preset = try await repository.readPreset()
             self.client = client
             self.repository = repository
             self.snapshot = freshSnapshot
             if let boostState {
                 self.boostEnabled = boostState
+            }
+            if let preset {
+                self.selectedPreset = preset
             }
             self.isConnected = true
             self.statusText = "Kapcsolodva"
@@ -59,16 +68,20 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func refresh(updateStatus: Bool = true) async {
-        guard !isBusy, let repository else { return }
-        isBusy = true
-        defer { isBusy = false }
+        guard !isBusy, !isRefreshing, let repository else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
 
         do {
             let freshSnapshot = try await repository.readSnapshot()
             let boostState = try await repository.readBoostEnabled()
+            let preset = try await repository.readPreset()
             snapshot = freshSnapshot
             if let boostState {
                 self.boostEnabled = boostState
+            }
+            if let preset {
+                self.selectedPreset = preset
             }
             if updateStatus {
                 statusText = "Frissitve"
@@ -86,6 +99,7 @@ final class ConnectionViewModel: ObservableObject {
         repository = nil
         isConnected = false
         boostEnabled = false
+        selectedPreset = .k1
         statusText = "Lecsatlakozva"
     }
 
@@ -101,6 +115,22 @@ final class ConnectionViewModel: ObservableObject {
             statusText = boostEnabled ? "Boost bekapcsolva" : "Boost kikapcsolva"
         } catch {
             statusText = "Sikertelen Boost iras: \(error.localizedDescription)"
+        }
+    }
+
+    func setPreset(_ preset: TAC5Preset) async {
+        guard !isBusy, isConnected, let repository else { return }
+        guard selectedPreset != preset else { return }
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            try await repository.writePreset(preset)
+            let readBack = try await repository.readPreset()
+            selectedPreset = readBack ?? preset
+            statusText = "Preset: \(selectedPreset.label)"
+        } catch {
+            statusText = "Sikertelen preset valtas: \(error.localizedDescription)"
         }
     }
 
@@ -168,6 +198,16 @@ struct ContentView: View {
                         }
                     }
                     .disabled(viewModel.isBusy)
+                }
+
+                HStack {
+                    ForEach(TAC5Preset.allCases, id: \.rawValue) { preset in
+                        Button(preset.label) {
+                            Task { await viewModel.setPreset(preset) }
+                        }
+                        .buttonStyle(viewModel.selectedPreset == preset ? .borderedProminent : .bordered)
+                        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.selectedPreset == preset)
+                    }
 
                     Button(viewModel.boostEnabled ? "Boost ON" : "Boost OFF") {
                         Task { await viewModel.setBoostEnabled(!viewModel.boostEnabled) }
@@ -175,6 +215,17 @@ struct ContentView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(viewModel.boostEnabled ? .green : .gray)
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
+
+                    Button("Close") {
+                        Task {
+                            if viewModel.isConnected {
+                                await viewModel.disconnect()
+                            }
+                            closeApplication()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
                 }
 
                 Text(viewModel.statusText)
@@ -231,5 +282,12 @@ struct ContentView: View {
     private func valueText(_ value: Double?, suffix: String) -> String {
         guard let value else { return "-" }
         return String(format: "%.1f%@", value, suffix)
+    }
+
+    private func closeApplication() {
+#if canImport(UIKit)
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        UIApplication.shared.requestSceneSessionDestruction(scene.session, options: nil, errorHandler: nil)
+#endif
     }
 }
