@@ -584,48 +584,68 @@ private struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Tracing") {
-                    Toggle("Enable Trace Logging", isOn: Binding(
-                        get: { viewModel.traceEnabled },
-                        set: { viewModel.setTraceEnabled($0) }
-                    ))
-
-                    Text("When trace logging is off, trace export and clear buttons are hidden on the main screen.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("Operation Mode") {
-                    ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
-                        Button {
-                            Task { await viewModel.setOperationMode(mode) }
-                        } label: {
-                            HStack {
-                                Text(mode.label)
-                                Spacer()
-                                if viewModel.operationMode == mode {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.accent)
-                                }
-                            }
-                        }
-                        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.operationMode == mode)
-                    }
-
-                    Text("Current mode: \(viewModel.operationMode.label)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                tracingSection
+                operationModeSection
             }
             .navigationTitle("Settings")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
+                doneToolbarItem
+            }
+        }
+    }
+
+    private var tracingSection: some View {
+        Section("Tracing") {
+            Toggle("Enable Trace Logging", isOn: traceToggleBinding)
+
+            Text("When trace logging is off, trace export and clear buttons are hidden on the main screen.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var operationModeSection: some View {
+        Section("Operation Mode") {
+            ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
+                operationModeRow(for: mode)
+            }
+
+            Text("Current mode: \(viewModel.operationMode.label)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var traceToggleBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.traceEnabled },
+            set: { viewModel.setTraceEnabled($0) }
+        )
+    }
+
+    private var doneToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("Done") {
+                dismiss()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func operationModeRow(for mode: TAC5OperationMode) -> some View {
+        Button {
+            Task { await viewModel.setOperationMode(mode) }
+        } label: {
+            HStack {
+                Text(mode.label)
+                Spacer()
+                if viewModel.operationMode == mode {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.accent)
                 }
             }
         }
+        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.operationMode == mode)
     }
 }
 
