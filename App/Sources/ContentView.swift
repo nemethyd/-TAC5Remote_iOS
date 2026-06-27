@@ -262,9 +262,6 @@ final class ConnectionViewModel: ObservableObject {
         UserDefaults.standard.set(enabled, forKey: traceEnabledDefaultsKey)
         if enabled {
             trace("trace logging enabled")
-            statusText = "Trace logging enabled"
-        } else {
-            statusText = "Trace logging disabled"
         }
     }
 
@@ -522,9 +519,12 @@ struct ContentView: View {
             .navigationTitle("TAC5 Remote")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings") {
+                    Button {
                         isShowingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
                     }
+                    .accessibilityLabel("Settings")
                 }
             }
             .sheet(isPresented: $isShowingSettings) {
@@ -586,6 +586,7 @@ private struct SettingsView: View {
             Form {
                 tracingSection
                 operationModeSection
+                modeParametersSection
             }
             .navigationTitle("Settings")
             .toolbar {
@@ -606,14 +607,42 @@ private struct SettingsView: View {
 
     private var operationModeSection: some View {
         Section("Operation Mode") {
-            ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
-                operationModeRow(for: mode)
-            }
+            modeButtonRow
 
             Text("Current mode: \(viewModel.operationMode.label)")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            Text(viewModel.statusText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+    }
+
+    @ViewBuilder
+    private var modeParametersSection: some View {
+        Section("Mode Parameters") {
+            if viewModel.operationMode == .ca {
+                CAModeParametersPreview()
+            } else {
+                Text("No mapped editable parameters for \(viewModel.operationMode.label) yet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var modeButtonRow: some View {
+        HStack(spacing: 8) {
+            ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
+                Button(mode.label) {
+                    Task { await viewModel.setOperationMode(mode) }
+                }
+                .buttonStyle(viewModel.operationMode == mode ? .borderedProminent : .bordered)
+                .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.operationMode == mode)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var traceToggleBinding: Binding<Bool> {
@@ -630,22 +659,66 @@ private struct SettingsView: View {
             }
         }
     }
+}
+
+private struct CAModeParametersPreview: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            parameterLine(title: "Exhaust / Supply Ratio", supplyValue: "100", exhaustValue: nil, unit: "%")
+
+            HStack {
+                Text("Parameter")
+                    .font(.caption.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Supply")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 72, alignment: .center)
+                Text("Exhaust")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 72, alignment: .center)
+            }
+
+            parameterLine(title: "Airflow I", supplyValue: "200", exhaustValue: "200", unit: "m3/h")
+            parameterLine(title: "Airflow II", supplyValue: "300", exhaustValue: "300", unit: "m3/h")
+            parameterLine(title: "Airflow III", supplyValue: "400", exhaustValue: "400", unit: "m3/h")
+
+            Text("Layout preview only. Register mapping and write actions will be added after per-mode tests.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
 
     @ViewBuilder
-    private func operationModeRow(for mode: TAC5OperationMode) -> some View {
-        Button {
-            Task { await viewModel.setOperationMode(mode) }
-        } label: {
-            HStack {
-                Text(mode.label)
-                Spacer()
-                if viewModel.operationMode == mode {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Color.accentColor)
-                }
+    private func parameterLine(title: String, supplyValue: String, exhaustValue: String?, unit: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            valueBox(supplyValue)
+
+            if let exhaustValue {
+                valueBox(exhaustValue)
             }
+
+            Text(unit)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
         }
-        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.operationMode == mode)
+    }
+
+    private func valueBox(_ value: String) -> some View {
+        Text(value)
+            .font(.body.monospacedDigit())
+            .frame(width: 72, height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.gray.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.gray.opacity(0.25), lineWidth: 1)
+            )
     }
 }
 
