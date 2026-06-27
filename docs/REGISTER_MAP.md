@@ -1,0 +1,56 @@
+# TAC5 Register Map
+
+This is a working reference for the TAC5 / EOLE 4 Modbus map.
+
+Important indexing note:
+- The live Modbus reads in this repo use 0-based holding register offsets.
+- The vendor-style document addresses use 41xxx/42xxx references.
+- Both forms are listed below so the map is easier to cross-check.
+
+| Key | Raw offset | Document address | Access | Type | Scale | Unit | Status | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | 154 | 41001 | ro | int16 | 0.1 | C | confirmed | live sensor value |
+| T2 | 155 | 41002 | ro | int16 | 0.1 | C | confirmed | live sensor value |
+| T3 | 156 | 41003 | ro | int16 | 0.1 | C | confirmed | live sensor value |
+| T4 | 8 | 41004 | ro | int16 | 0.1 | C | alias | backward-compatible alias, currently mapped to T7 in code |
+| T7 | 8 | 41004 | ro | int16 | 0.1 | C | confirmed | live sensor value |
+| SUPPLY_AIRFLOW | 64 | 41010 | ro | uint16 | 1 | m3_h | confirmed | live supply airflow |
+| EXHAUST_AIRFLOW | 72 | 41011 | ro | uint16 | 1 | m3_h | confirmed | live exhaust airflow |
+| WORKING_MODE | 52 | 42001 | rw | uint16 | 1 | enum | likely confirmed | active mode / preset index; K1=1, K2=2, K3=3, Boost observed as 1/3 transition |
+| RATIO_EXH_SUP | 53 | 42002 | rw | uint16 | 0.01 | ratio | likely confirmed | tracks preset / boost setpoint block |
+| AIRFLOW_I | 55 | 42003 | rw | uint16 | 1 | m3_h | likely confirmed | K1 preset value observed at 200, Boost at 840 |
+| AIRFLOW_II | 56 | 42004 | rw | uint16 | 1 | m3_h | likely confirmed | K2 preset value observed at 300, Boost at 840 |
+| AIRFLOW_III | 202 | 42005 | rw | uint16 | 1 | m3_h | likely confirmed | third state / mirror register observed with K1/K2/K3 |
+| BOOST_ENABLE | 227 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Boost on, 0 = Boost off (validated in Wireshark) |
+
+## Observed behavior
+
+- K1 -> K2 -> K3 produced the following sequence:
+  - 52: 1 -> 2 -> 3
+  - 53: 200 -> 300 -> 400
+  - 55: 200 -> 300 -> 400
+  - 56: 200 -> 300 -> 400
+  - 202: 1 -> 2 -> 3
+- Boost on produced:
+  - 52: 3 -> 1
+  - 53: 400 -> 840
+  - 55: 400 -> 840
+  - 56: 400 -> 840
+- Boost off returned:
+  - 52: 1 -> 3
+  - 53: 840 -> 400
+  - 55: 840 -> 400
+  - 56: 840 -> 400
+
+- Direct Boost control write observed in Wireshark:
+  - Function code 6 to reference/register 227
+  - Value 1 enables Boost
+  - Value 0 disables Boost
+  - Response returned with no Modbus exception
+
+## Open questions
+
+- Whether 52 is strictly the active preset index or a broader working mode selector.
+- Whether 202 is a mirror, latch, or secondary state register.
+- Whether AIRFLOW_I / II / III are three editable setpoints or a shared block with one active selector.
+- Whether Boost is a dedicated mode bit or an alternate setpoint profile.

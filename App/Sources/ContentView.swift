@@ -4,36 +4,23 @@ import TAC5Core
 
 @MainActor
 final class ConnectionViewModel: ObservableObject {
-    @Published var host = "192.168.10.80"
-    @Published var port = "502"
-    @Published var unitId = "1"
+    @Published var connectionTarget = "192.168.10.80:502:1"
     @Published var statusText = "Disconnected"
     @Published var snapshot = TAC5Snapshot()
     @Published var isConnected = false
     @Published var isBusy = false
-    @Published var cloudUploadEnabled = false {
-        didSet {
-            if !cloudUploadEnabled {
-                cloudStatusText = "Cloud disabled"
-            }
-        }
-    }
-    @Published var cloudEndpoint = "https://example.com/api/tac5/snapshots"
-    @Published var cloudApiKey = ""
-    @Published var cloudStatusText = "Cloud disabled"
+    @Published var boostEnabled = false
 
     private var client: ModbusTCPClient?
     private var repository: TAC5Repository?
-    private let cloudSyncService: SnapshotCloudSyncing
-
-    init(cloudSyncService: SnapshotCloudSyncing = HTTPSnapshotCloudSyncService()) {
-        self.cloudSyncService = cloudSyncService
-    }
 
     func connect() async {
         guard !isBusy else { return }
-        guard let parsedPort = UInt16(port), let parsedUnitId = UInt8(unitId) else {
-            statusText = "Invalid port or unit ID"
+        let connection: (host: String, port: UInt16, unitId: UInt8)
+        do {
+            connection = try parseConnectionTarget()
+        } catch {
+            statusText = "Hibas kapcsolat formatum. Minta: 192.168.10.80:502:1"
             return
         }
 
@@ -42,9 +29,9 @@ final class ConnectionViewModel: ObservableObject {
         statusText = "Connecting..."
 
         let config = ModbusTCPConfig(
-            host: host,
-            port: parsedPort,
-            unitId: parsedUnitId,
+            host: connection.host,
+            port: connection.port,
+            unitId: connection.unitId,
             timeoutSeconds: 3
         )
 
@@ -55,17 +42,17 @@ final class ConnectionViewModel: ObservableObject {
             let freshSnapshot = try await withConnectTimeout(seconds: 8) {
                 try await repository.readSnapshot()
             }
+            let boostState = try await repository.readBoostEnabled()
             self.client = client
             self.repository = repository
             self.snapshot = freshSnapshot
-            self.isConnected = true
-            self.statusText = "Connected"
-
-            if cloudUploadEnabled {
-                await syncSnapshotToCloud(snapshot: freshSnapshot, trigger: "connect")
+            if let boostState {
+                self.boostEnabled = boostState
             }
+            self.isConnected = true
+            self.statusText = "Kapcsolodva"
         } catch {
-            self.statusText = "Connect/read failed: \(error.localizedDescription)"
+            self.statusText = "Sikertelen kapcsolat vagy olvasas: \(error.localizedDescription)"
             await client.disconnect()
             self.isConnected = false
         }
@@ -78,23 +65,15 @@ final class ConnectionViewModel: ObservableObject {
 
         do {
             let freshSnapshot = try await repository.readSnapshot()
+            let boostState = try await repository.readBoostEnabled()
             snapshot = freshSnapshot
-            statusText = "Connected"
-
-            if cloudUploadEnabled {
-                await syncSnapshotToCloud(snapshot: freshSnapshot, trigger: "refresh")
+            if let boostState {
+                self.boostEnabled = boostState
             }
+            statusText = "Frissitve"
         } catch {
-            statusText = "Refresh failed: \(error.localizedDescription)"
+            statusText = "Sikertelen frissites: \(error.localizedDescription)"
         }
-    }
-
-    func syncNow() async {
-        guard isConnected else {
-            cloudStatusText = "Connect first"
-            return
-        }
-        await syncSnapshotToCloud(snapshot: snapshot, trigger: "manual")
     }
 
     func disconnect() async {
@@ -102,28 +81,22 @@ final class ConnectionViewModel: ObservableObject {
         client = nil
         repository = nil
         isConnected = false
-        statusText = "Disconnected"
+        boostEnabled = false
+        statusText = "Lecsatlakozva"
     }
 
-    private func syncSnapshotToCloud(snapshot: TAC5Snapshot, trigger: String) async {
-        guard cloudUploadEnabled else {
-            cloudStatusText = "Cloud disabled"
-            return
-        }
-
-        let parsedUnitId = UInt8(unitId) ?? 1
-        cloudStatusText = "Cloud sync in progress..."
+    func setBoostEnabled(_ enabled: Bool) async {
+        guard !isBusy, isConnected, let repository else { return }
+        isBusy = true
+        defer { isBusy = false }
 
         do {
-            try await cloudSyncService.upload(
-                snapshot: snapshot,
-                source: SnapshotSourceInfo(host: host, unitId: parsedUnitId, trigger: trigger),
-                endpoint: cloudEndpoint,
-                apiKey: cloudApiKey.isEmpty ? nil : cloudApiKey
-            )
-            cloudStatusText = "Cloud sync OK"
+            try await repository.writeBoostEnabled(enabled)
+            let readBack = try await repository.readBoostEnabled()
+            boostEnabled = readBack ?? enabled
+            statusText = boostEnabled ? "Boost bekapcsolva" : "Boost kikapcsolva"
         } catch {
-            cloudStatusText = "Cloud sync failed: \(error.localizedDescription)"
+            statusText = "Sikertelen Boost iras: \(error.localizedDescription)"
         }
     }
 
@@ -145,29 +118,44 @@ final class ConnectionViewModel: ObservableObject {
             return result
         }
     }
+
+    private func parseConnectionTarget() throws -> (host: String, port: UInt16, unitId: UInt8) {
+        let parts = connectionTarget
+            .split(separator: ":", omittingEmptySubsequences: false)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        guard parts.count == 3, !parts[0].isEmpty else { throw ModbusError.invalidResponse }
+        guard let port = UInt16(parts[1]), let unitId = UInt8(parts[2]) else { throw ModbusError.invalidResponse }
+        return (host: parts[0], port: port, unitId: unitId)
+    }
 }
 
 struct ContentView: View {
     @StateObject private var viewModel = ConnectionViewModel()
 
-    private var buildInfo: String {
+    private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        return v
+    }
+
+    private var buildNumber: String {
         let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        return "v\(v) (\(b))"
+        return b
+    }
+
+    private var buildInfo: String {
+        return "v\(appVersion) (#\(buildNumber))"
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Connection") {
-                    TextField("Host", text: $viewModel.host)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                    TextField("Port", text: $viewModel.port)
-                        .keyboardType(.numberPad)
-                    TextField("Unit ID", text: $viewModel.unitId)
-                        .keyboardType(.numberPad)
+            VStack(spacing: 12) {
+                TextField("Pelda: 192.168.10.80:502:1", text: $viewModel.connectionTarget)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .textFieldStyle(.roundedBorder)
 
+                HStack {
                     Button(viewModel.isConnected ? "Disconnect" : "Connect") {
                         if viewModel.isConnected {
                             Task { await viewModel.disconnect() }
@@ -177,54 +165,61 @@ struct ContentView: View {
                     }
                     .disabled(viewModel.isBusy)
 
-                    if viewModel.isConnected {
-                        Button("Refresh") {
-                            Task { await viewModel.refresh() }
-                        }
-                        .disabled(viewModel.isBusy)
+                    Button("Refresh") {
+                        Task { await viewModel.refresh() }
                     }
+                    .disabled(!viewModel.isConnected || viewModel.isBusy)
 
-                    Text(viewModel.statusText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("Cloud") {
-                    Toggle("Enable cloud upload", isOn: $viewModel.cloudUploadEnabled)
-
-                    TextField("Cloud endpoint", text: $viewModel.cloudEndpoint)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .keyboardType(.URL)
-
-                    SecureField("API key (optional)", text: $viewModel.cloudApiKey)
-
-                    Button("Sync Now") {
-                        Task { await viewModel.syncNow() }
+                    Button(viewModel.boostEnabled ? "Boost ON" : "Boost OFF") {
+                        Task { await viewModel.setBoostEnabled(!viewModel.boostEnabled) }
                     }
-                    .disabled(!viewModel.isConnected || !viewModel.cloudUploadEnabled || viewModel.isBusy)
-
-                    Text(viewModel.cloudStatusText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    .buttonStyle(.borderedProminent)
+                    .tint(viewModel.boostEnabled ? .green : .gray)
+                    .disabled(!viewModel.isConnected || viewModel.isBusy)
                 }
 
-                Section("Telemetry") {
-                    LabeledContent("T1", value: valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
-                    LabeledContent("T2", value: valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
-                    LabeledContent("T3", value: valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
-                    LabeledContent("T7", value: valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
-                    LabeledContent("Supply", value: valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
-                    LabeledContent("Exhaust", value: valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
+                Text(viewModel.statusText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Divider()
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    metricCard("T1", valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
+                    metricCard("T2", valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
+                    metricCard("T3", valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
+                    metricCard("T7", valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
+                    metricCard("Supply", valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
+                    metricCard("Exhaust", valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
                 }
 
-                Section("App") {
-                    LabeledContent("Build", value: buildInfo)
-                    LabeledContent("Sensor mapping", value: "T1/T2/T3/T7")
-                }
+                Spacer(minLength: 0)
+
+                Text(buildInfo)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .navigationTitle("TAC5 Remote")
+            .padding(16)
+            .navigationTitle("TAC5 Remote(#\(buildNumber))")
         }
+    }
+
+    @ViewBuilder
+    private func metricCard(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.headline)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func valueText(_ value: Double?, suffix: String) -> String {

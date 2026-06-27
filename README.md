@@ -13,7 +13,6 @@ Modern iOS client foundation for TAC5-compatible units over Modbus TCP.
 
 - Modbus TCP connect/read/disconnect flow is implemented in `TAC5Core`.
 - The app can read a snapshot and display telemetry placeholders.
-- Cloud upload can be enabled from the UI and sends snapshot JSON to an HTTPS endpoint.
 - The repository is set up for GitHub Actions based cloud build.
 
 ## Scope
@@ -21,7 +20,6 @@ Modern iOS client foundation for TAC5-compatible units over Modbus TCP.
 - Manual host, port, and unit ID entry.
 - Read telemetry values from the unit.
 - Basic connect/disconnect and refresh flow.
-- Optional cloud sync for snapshots.
 - Later: write operations, diagnostics, planner screens, and richer device handling.
 
 ## Local development
@@ -43,14 +41,6 @@ This is enough for build validation, but not for reading a device that only exis
 
 - Manual TestFlight workflow: `.github/workflows/testflight-upload.yml`
 - Setup notes: `docs/TESTFLIGHT_SETUP.md`
-
-## Cloud sync payload
-
-The app sends JSON with:
-
-- `timestamp` in ISO-8601 format
-- `source` containing `host`, `unitId`, and `trigger`
-- `snapshot` with the telemetry fields (`t1`, `t2`, `t3`, `t7`, supply and exhaust airflow)
 
 ## Important notes
 

@@ -39,6 +39,7 @@ public enum TAC5Register: UInt16, CaseIterable {
     case t1 = 154
     case t2 = 155
     case t3 = 156
+    case boostEnable = 227
 }
 
 public struct TAC5Codec {
@@ -83,6 +84,18 @@ public actor TAC5Repository {
             supplyAirflowM3h: supplyRaw.map(codec.decodeAirflow),
             exhaustAirflowM3h: exhaustRaw.map(codec.decodeAirflow)
         )
+    }
+
+    public func readBoostEnabled() async throws -> Bool? {
+        guard let raw = try await readRegister(TAC5Register.boostEnable.rawValue) else {
+            return nil
+        }
+        return raw == 1
+    }
+
+    public func writeBoostEnabled(_ enabled: Bool) async throws {
+        let value: UInt16 = enabled ? 1 : 0
+        try await client.writeSingleRegister(address: TAC5Register.boostEnable.rawValue, value: value)
     }
 
     private func readRegister(_ address: UInt16) async throws -> UInt16? {

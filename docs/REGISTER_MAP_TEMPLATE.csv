@@ -10,3 +10,4 @@ RATIO_EXH_SUP,42002,uint16,rw,0.01,ratio,placeholder
 AIRFLOW_I,42003,uint16,rw,1,m3_h,placeholder
 AIRFLOW_II,42004,uint16,rw,1,m3_h,placeholder
 AIRFLOW_III,42005,uint16,rw,1,m3_h,placeholder
+BOOST_ENABLE,raw:227,uint16,rw,1,bool_like,FC06 write observed: 1=Boost on; 0=Boost off; document address TBD
