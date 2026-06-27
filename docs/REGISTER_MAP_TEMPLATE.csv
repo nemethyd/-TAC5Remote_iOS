@@ -1,14 +1,15 @@
 key,address,type,access,scale,unit,notes
-T1,41001,int16,ro,0.1,C,placeholder
-T2,41002,int16,ro,0.1,C,placeholder
-T3,41003,int16,ro,0.1,C,placeholder
-T4,41004,int16,ro,0.1,C,placeholder
-SUPPLY_AIRFLOW,41010,uint16,ro,1,m3_h,placeholder
-EXHAUST_AIRFLOW,41011,uint16,ro,1,m3_h,placeholder
-WORKING_MODE,42001,uint16,rw,1,enum,placeholder
+T1,41001,int16,ro,0.1,C,confirmed live read
+T2,41002,int16,ro,0.1,C,confirmed live read
+T3,41003,int16,ro,0.1,C,confirmed live read
+T4,41004,int16,ro,0.1,C,alias to T7 in app mapping
+SUPPLY_AIRFLOW,41010,uint16,ro,1,m3_h,confirmed live read
+EXHAUST_AIRFLOW,41011,uint16,ro,1,m3_h,confirmed live read
+WORKING_MODE,42001,uint16,rw,1,enum,likely confirmed from behavior; vendor mapping pending
 PRESET_WRITE_TRIGGER,raw:199,uint16,rw,1,trigger,FC06: write 0 before each preset change
-RATIO_EXH_SUP,42002,uint16,rw,0.01,ratio,placeholder
-AIRFLOW_I,42003,uint16,rw,1,m3_h,placeholder
-AIRFLOW_II,42004,uint16,rw,1,m3_h,placeholder
+RATIO_EXH_SUP,42002,uint16,rw,0.01,ratio,likely confirmed from behavior
+AIRFLOW_I,42003,uint16,rw,1,m3_h,likely confirmed from behavior
+AIRFLOW_II,42004,uint16,rw,1,m3_h,likely confirmed from behavior
 PRESET_STATE,42005,uint16,rw,1,enum,K1=1; K2=2; K3=3 (confirmed)
+BYPASS_ENABLE,raw:222,uint16,rw,1,bool_like,FC06 write observed: 1=Bypass on; 0=Bypass off; document address TBD
 BOOST_ENABLE,raw:227,uint16,rw,1,bool_like,FC06 write observed: 1=Boost on; 0=Boost off; document address TBD

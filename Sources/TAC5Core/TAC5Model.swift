@@ -42,6 +42,7 @@ public enum TAC5Register: UInt16, CaseIterable {
     case t1 = 154
     case t2 = 155
     case t3 = 156
+    case bypassEnable = 222
     case boostEnable = 227
 }
 
@@ -121,9 +122,21 @@ public actor TAC5Repository {
         try await readRegister(TAC5Register.presetTargetAirflow.rawValue)
     }
 
+    public func readBypassEnabled() async throws -> Bool? {
+        guard let raw = try await readRegister(TAC5Register.bypassEnable.rawValue) else {
+            return nil
+        }
+        return raw == 1
+    }
+
     public func writeBoostEnabled(_ enabled: Bool) async throws {
         let value: UInt16 = enabled ? 1 : 0
         try await client.writeSingleRegister(address: TAC5Register.boostEnable.rawValue, value: value)
+    }
+
+    public func writeBypassEnabled(_ enabled: Bool) async throws {
+        let value: UInt16 = enabled ? 1 : 0
+        try await client.writeSingleRegister(address: TAC5Register.bypassEnable.rawValue, value: value)
     }
 
     public func writePreset(_ preset: TAC5Preset) async throws {

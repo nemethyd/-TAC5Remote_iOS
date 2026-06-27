@@ -13,6 +13,7 @@ final class ConnectionViewModel: ObservableObject {
     @Published var isConnected = false
     @Published var isBusy = false
     @Published var boostEnabled = false
+    @Published var bypassEnabled = false
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
 
@@ -49,6 +50,7 @@ final class ConnectionViewModel: ObservableObject {
                 try await repository.readSnapshot()
             }
             let boostState = try await repository.readBoostEnabled()
+            let bypassState = try await repository.readBypassEnabled()
             let preset = try await repository.readPreset()
             let activeTarget = try await repository.readActivePresetTargetAirflow()
             self.client = client
@@ -56,6 +58,9 @@ final class ConnectionViewModel: ObservableObject {
             self.snapshot = freshSnapshot
             if let boostState {
                 self.boostEnabled = boostState
+            }
+            if let bypassState {
+                self.bypassEnabled = bypassState
             }
             if let preset {
                 self.selectedPreset = preset
@@ -80,11 +85,15 @@ final class ConnectionViewModel: ObservableObject {
         do {
             let freshSnapshot = try await repository.readSnapshot()
             let boostState = try await repository.readBoostEnabled()
+            let bypassState = try await repository.readBypassEnabled()
             let preset = try await repository.readPreset()
             let activeTarget = try await repository.readActivePresetTargetAirflow()
             snapshot = freshSnapshot
             if let boostState {
                 self.boostEnabled = boostState
+            }
+            if let bypassState {
+                self.bypassEnabled = bypassState
             }
             if let preset {
                 self.selectedPreset = preset
@@ -108,6 +117,7 @@ final class ConnectionViewModel: ObservableObject {
         repository = nil
         isConnected = false
         boostEnabled = false
+        bypassEnabled = false
         selectedPreset = .k1
         presetTargetByPreset = [:]
         statusText = "Lecsatlakozva"
@@ -145,6 +155,21 @@ final class ConnectionViewModel: ObservableObject {
             statusText = "Preset: \(selectedPreset.label)"
         } catch {
             statusText = "Sikertelen preset valtas: \(error.localizedDescription)"
+        }
+    }
+
+    func setBypassEnabled(_ enabled: Bool) async {
+        guard !isBusy, isConnected, let repository else { return }
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            try await repository.writeBypassEnabled(enabled)
+            let readBack = try await repository.readBypassEnabled()
+            bypassEnabled = readBack ?? enabled
+            statusText = bypassEnabled ? "Bypass bekapcsolva" : "Bypass kikapcsolva"
+        } catch {
+            statusText = "Sikertelen bypass iras: \(error.localizedDescription)"
         }
     }
 
@@ -234,6 +259,13 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(viewModel.boostEnabled ? .green : .gray)
+                    .disabled(!viewModel.isConnected || viewModel.isBusy)
+
+                    Button(viewModel.bypassEnabled ? "Bypass ON" : "Bypass OFF") {
+                        Task { await viewModel.setBypassEnabled(!viewModel.bypassEnabled) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(viewModel.bypassEnabled ? .blue : .gray)
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
 
                     Button("Close") {

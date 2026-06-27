@@ -8,6 +8,12 @@ Important indexing note:
 - The vendor-style document addresses use 41xxx/42xxx references.
 - Both forms are listed below so the map is easier to cross-check.
 
+## Confidence legend
+
+- confirmed: directly verified from capture and/or stable readback behavior
+- likely confirmed: repeatedly observed, but vendor mapping is still not formally verified
+- alias: compatibility alias in app code, not a distinct physical sensor
+
 | Key | Raw offset | Document address | Access | Type | Scale | Unit | Status | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 154 | 41001 | ro | int16 | 0.1 | C | confirmed | live sensor value |
@@ -23,9 +29,23 @@ Important indexing note:
 | AIRFLOW_I | 55 | 42003 | rw | uint16 | 1 | m3_h | likely confirmed | K1 preset value observed at 200, Boost at 840 |
 | AIRFLOW_II | 56 | 42004 | rw | uint16 | 1 | m3_h | likely confirmed | K2 preset value observed at 300, Boost at 840 |
 | PRESET_STATE | 202 | 42005 | rw | uint16 | 1 | enum | confirmed | K1=1, K2=2, K3=3 |
+| BYPASS_ENABLE | 222 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Bypass on, 0 = Bypass off |
 | BOOST_ENABLE | 227 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Boost on, 0 = Boost off (validated in Wireshark) |
 
-## Observed behavior
+## Confirmed write sequences (capture-based)
+
+- Preset transitions (capture: k123_cycle_new.pcapng):
+  - K3 -> K1: 199=0, then 202=1
+  - K1 -> K2: 199=0, then 202=2
+  - K2 -> K3: 199=0, then 202=3
+- Bypass toggle (capture: bypass_test_capture.pcapng):
+  - ON: 222=1
+  - OFF: 222=0
+- Boost toggle (multiple captures):
+  - ON: 227=1
+  - OFF: 227=0
+
+## Observed runtime behavior
 
 - K1 -> K2 -> K3 produced the following sequence:
   - 52: 1 -> 2 -> 3
@@ -44,16 +64,9 @@ Important indexing note:
   - 55: 840 -> 400
   - 56: 840 -> 400
 
-- Direct Boost control write observed in Wireshark:
-  - Function code 6 to reference/register 227
-  - Value 1 enables Boost
-  - Value 0 disables Boost
-  - Response returned with no Modbus exception
-
-- Direct preset write sequence observed in Wireshark (capture: k123_cycle_new.pcapng):
-  - K3 -> K1: 199=0, then 202=1
-  - K1 -> K2: 199=0, then 202=2
-  - K2 -> K3: 199=0, then 202=3
+- The app writes preset changes as a two-step command: 199=0, then 202=<1|2|3>.
+- The app writes bypass as a single FC06 command to register 222.
+- The app writes boost as a single FC06 command to register 227.
 
 ## Open questions
 
