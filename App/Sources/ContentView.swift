@@ -230,9 +230,25 @@ final class ConnectionViewModel: ObservableObject {
         guard operationMode != mode else { return }
         isBusy = true
         defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
 
         do {
-            try await repository.writeOperationMode(mode)
+            do {
+                try await repository.writeOperationMode(mode)
+            } catch {
+                if isTransientModeError(error) {
+                    trace("mode transient error; retrying once: \(error.localizedDescription)")
+                    suppressRefreshUntil = Date().addingTimeInterval(4.0)
+                    await reconnectAfterTransientModeError()
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    guard let retryRepository = self.repository else {
+                        throw ModbusError.connectionClosed
+                    }
+                    try await retryRepository.writeOperationMode(mode)
+                } else {
+                    throw error
+                }
+            }
             operationMode = mode
             if let readBack = try? await repository.readOperationMode() {
                 operationMode = readBack
@@ -325,6 +341,34 @@ final class ConnectionViewModel: ObservableObject {
             trace("preset retry reconnect success")
         } catch {
             trace("preset retry reconnect failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func isTransientModeError(_ error: Error) -> Bool {
+        isTransientPresetError(error)
+    }
+
+    private func reconnectAfterTransientModeError() async {
+        do {
+            let connection = try parseConnectionTarget()
+            await client?.disconnect()
+
+            let config = ModbusTCPConfig(
+                host: connection.host,
+                port: connection.port,
+                unitId: connection.unitId,
+                timeoutSeconds: 4
+            )
+
+            let newClient = ModbusTCPClient(config: config)
+            let newRepository = TAC5Repository(client: newClient)
+            _ = try await newRepository.readOperationMode()
+            self.client = newClient
+            self.repository = newRepository
+            self.isConnected = true
+            trace("mode retry reconnect success")
+        } catch {
+            trace("mode retry reconnect failed: \(error.localizedDescription)")
         }
     }
 
