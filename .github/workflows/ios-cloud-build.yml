@@ -53,6 +53,9 @@ jobs:
           xcodebuild \
             -project TAC5Remote_iOS_App.xcodeproj \
             -scheme TAC5Remote_iOS_App \
+            -configuration Release \
             -destination "generic/platform=iOS Simulator" \
+            ENABLE_PREVIEWS=NO \
+            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
             build

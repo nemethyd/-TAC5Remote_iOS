@@ -202,11 +202,19 @@ struct ContentView: View {
 
                 HStack {
                     ForEach(TAC5Preset.allCases, id: \.rawValue) { preset in
-                        Button(preset.label) {
-                            Task { await viewModel.setPreset(preset) }
+                        if viewModel.selectedPreset == preset {
+                            Button(preset.label) {
+                                Task { await viewModel.setPreset(preset) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(true)
+                        } else {
+                            Button(preset.label) {
+                                Task { await viewModel.setPreset(preset) }
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!viewModel.isConnected || viewModel.isBusy)
                         }
-                        .buttonStyle(viewModel.selectedPreset == preset ? .borderedProminent : .bordered)
-                        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.selectedPreset == preset)
                     }
 
                     Button(viewModel.boostEnabled ? "Boost ON" : "Boost OFF") {
