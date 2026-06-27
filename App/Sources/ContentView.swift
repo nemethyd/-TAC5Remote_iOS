@@ -49,10 +49,10 @@ final class ConnectionViewModel: ObservableObject {
             let freshSnapshot = try await withConnectTimeout(seconds: 8) {
                 try await repository.readSnapshot()
             }
-            let boostState = try await repository.readBoostEnabled()
-            let bypassState = try await repository.readBypassEnabled()
-            let preset = try await repository.readPreset()
-            let activeTarget = try await repository.readActivePresetTargetAirflow()
+            let boostState = try? await repository.readBoostEnabled()
+            let bypassState = try? await repository.readBypassEnabled()
+            let preset = try? await repository.readPreset()
+            let activeTarget = try? await repository.readActivePresetTargetAirflow()
             self.client = client
             self.repository = repository
             self.snapshot = freshSnapshot
@@ -84,10 +84,10 @@ final class ConnectionViewModel: ObservableObject {
 
         do {
             let freshSnapshot = try await repository.readSnapshot()
-            let boostState = try await repository.readBoostEnabled()
-            let bypassState = try await repository.readBypassEnabled()
-            let preset = try await repository.readPreset()
-            let activeTarget = try await repository.readActivePresetTargetAirflow()
+            let boostState = try? await repository.readBoostEnabled()
+            let bypassState = try? await repository.readBypassEnabled()
+            let preset = try? await repository.readPreset()
+            let activeTarget = try? await repository.readActivePresetTargetAirflow()
             snapshot = freshSnapshot
             if let boostState {
                 self.boostEnabled = boostState
@@ -130,8 +130,11 @@ final class ConnectionViewModel: ObservableObject {
 
         do {
             try await repository.writeBoostEnabled(enabled)
-            let readBack = try await repository.readBoostEnabled()
-            boostEnabled = readBack ?? enabled
+            // Some units accept write but reject immediate readback for this register.
+            boostEnabled = enabled
+            if let readBack = try? await repository.readBoostEnabled() {
+                boostEnabled = readBack
+            }
             statusText = boostEnabled ? "Boost bekapcsolva" : "Boost kikapcsolva"
         } catch {
             statusText = "Sikertelen Boost iras: \(error.localizedDescription)"
@@ -165,8 +168,11 @@ final class ConnectionViewModel: ObservableObject {
 
         do {
             try await repository.writeBypassEnabled(enabled)
-            let readBack = try await repository.readBypassEnabled()
-            bypassEnabled = readBack ?? enabled
+            // Some units accept write but reject immediate readback for this register.
+            bypassEnabled = enabled
+            if let readBack = try? await repository.readBypassEnabled() {
+                bypassEnabled = readBack
+            }
             statusText = bypassEnabled ? "Bypass bekapcsolva" : "Bypass kikapcsolva"
         } catch {
             statusText = "Sikertelen bypass iras: \(error.localizedDescription)"
@@ -236,7 +242,26 @@ struct ContentView: View {
                             Task { await viewModel.connect() }
                         }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity)
                     .disabled(viewModel.isBusy)
+
+                    Button("Close") {
+                        Task {
+                            if viewModel.isConnected {
+                                await viewModel.disconnect()
+                            }
+                            let didClose = await MainActor.run { closeApplication() }
+                            if !didClose {
+                                await MainActor.run {
+                                    viewModel.statusText = "Kapcsolat bontva. iOS alatt az app bezarasa gombbal nem garantalhato."
+                                }
+                            }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .frame(maxWidth: .infinity)
                 }
 
                 HStack {
@@ -253,33 +278,36 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                         .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.selectedPreset == preset)
                     }
+                }
 
-                    Button(viewModel.boostEnabled ? "Boost ON" : "Boost OFF") {
+                HStack {
+                    Button {
                         Task { await viewModel.setBoostEnabled(!viewModel.boostEnabled) }
+                    } label: {
+                        ModeToggleLabel(
+                            title: "Boost",
+                            systemImage: "bolt.fill",
+                            isOn: viewModel.boostEnabled,
+                            accent: .green
+                        )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(viewModel.boostEnabled ? .green : .gray)
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
 
-                    Button(viewModel.bypassEnabled ? "Bypass ON" : "Bypass OFF") {
+                    Button {
                         Task { await viewModel.setBypassEnabled(!viewModel.bypassEnabled) }
+                    } label: {
+                        ModeToggleLabel(
+                            title: "Bypass",
+                            systemImage: "arrow.triangle.branch",
+                            isOn: viewModel.bypassEnabled,
+                            accent: .blue
+                        )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(viewModel.bypassEnabled ? .blue : .gray)
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
-
-                    Button("Close") {
-                        Task {
-                            if viewModel.isConnected {
-                                await viewModel.disconnect()
-                            }
-                            await MainActor.run {
-                                closeApplication()
-                            }
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
                 }
 
                 Text(viewModel.statusText)
@@ -338,7 +366,7 @@ struct ContentView: View {
         return String(format: "%.1f%@", value, suffix)
     }
 
-    private func closeApplication() {
+    private func closeApplication() -> Bool {
 #if canImport(UIKit)
         let activeScene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -347,8 +375,11 @@ struct ContentView: View {
         let scene = activeScene
             ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
 
-        guard let scene else { return }
+        guard let scene else { return false }
         UIApplication.shared.requestSceneSessionDestruction(scene.session, options: nil, errorHandler: nil)
+        return true
+    #else
+        return false
 #endif
     }
 }
@@ -412,5 +443,34 @@ private struct FanLevelIcon: View {
                 .frame(width: 5, height: 5)
         }
         .frame(width: 24, height: 24)
+    }
+}
+
+private struct ModeToggleLabel: View {
+    let title: String
+    let systemImage: String
+    let isOn: Bool
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption)
+                Text(isOn ? "ON" : "OFF")
+                    .font(.caption2.weight(.semibold))
+            }
+        }
+        .foregroundStyle(isOn ? Color.white : Color.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isOn ? accent : Color.gray.opacity(0.14))
+        )
     }
 }
