@@ -1,7 +1,11 @@
 name: TestFlight Upload
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - iOS Cloud Build
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
@@ -11,6 +15,7 @@ permissions:
 
 jobs:
   upload_testflight:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     name: Build And Upload To TestFlight
     runs-on: macos-latest
     timeout-minutes: 45
@@ -20,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Select latest Xcode
         uses: maxim-lobanov/setup-xcode@v1
