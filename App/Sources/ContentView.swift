@@ -18,13 +18,16 @@ final class ConnectionViewModel: ObservableObject {
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
     @Published var traceLogURL: URL?
+    @Published var traceEnabled = true
 
     private var client: ModbusTCPClient?
     private var repository: TAC5Repository?
     private var isRefreshing = false
     private var suppressRefreshUntil: Date = .distantPast
+    private let traceEnabledDefaultsKey = "trace.enabled"
 
     init() {
+        loadTracePreference()
         initializeTraceLog()
     }
 
@@ -254,6 +257,17 @@ final class ConnectionViewModel: ObservableObject {
         }
     }
 
+    func setTraceEnabled(_ enabled: Bool) {
+        traceEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: traceEnabledDefaultsKey)
+        if enabled {
+            trace("trace logging enabled")
+            statusText = "Trace logging enabled"
+        } else {
+            statusText = "Trace logging disabled"
+        }
+    }
+
     private func withConnectTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {
@@ -333,7 +347,16 @@ final class ConnectionViewModel: ObservableObject {
         trace("session start app=\(appVersion) build=\(buildNumber)")
     }
 
+    private func loadTracePreference() {
+        if UserDefaults.standard.object(forKey: traceEnabledDefaultsKey) == nil {
+            traceEnabled = true
+            return
+        }
+        traceEnabled = UserDefaults.standard.bool(forKey: traceEnabledDefaultsKey)
+    }
+
     private func trace(_ message: String) {
+        guard traceEnabled else { return }
         guard let traceLogURL else { return }
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let line = "\(timestamp) \(message)\n"
@@ -352,6 +375,7 @@ final class ConnectionViewModel: ObservableObject {
 
 struct ContentView: View {
     @StateObject private var viewModel = ConnectionViewModel()
+    @State private var isShowingSettings = false
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
@@ -406,24 +430,6 @@ struct ContentView: View {
                 }
 
                 HStack {
-                    ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
-                        if viewModel.operationMode == mode {
-                            Button(mode.label) {
-                                Task { await viewModel.setOperationMode(mode) }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(true)
-                        } else {
-                            Button(mode.label) {
-                                Task { await viewModel.setOperationMode(mode) }
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(!viewModel.isConnected || viewModel.isBusy)
-                        }
-                    }
-                }
-
-                HStack {
                     ForEach(TAC5Preset.allCases, id: \.rawValue) { preset in
                         Button {
                             Task { await viewModel.setPreset(preset) }
@@ -469,20 +475,22 @@ struct ContentView: View {
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
                 }
 
-                HStack {
-                    if let traceURL = viewModel.traceLogURL {
-                        ShareLink(item: traceURL) {
-                            Label("Export Trace", systemImage: "square.and.arrow.up")
+                if viewModel.traceEnabled {
+                    HStack {
+                        if let traceURL = viewModel.traceLogURL {
+                            ShareLink(item: traceURL) {
+                                Label("Export Trace", systemImage: "square.and.arrow.up")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .buttonStyle(.bordered)
+                        }
+
+                        Button("Clear Trace") {
+                            viewModel.clearTraceLog()
                         }
                         .frame(maxWidth: .infinity)
                         .buttonStyle(.bordered)
                     }
-
-                    Button("Clear Trace") {
-                        viewModel.clearTraceLog()
-                    }
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(.bordered)
                 }
 
                 Text(viewModel.statusText)
@@ -512,6 +520,16 @@ struct ContentView: View {
             }
             .padding(16)
             .navigationTitle("TAC5 Remote")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Settings") {
+                        isShowingSettings = true
+                    }
+                }
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsView(viewModel: viewModel)
+            }
             .task(id: viewModel.isConnected) {
                 guard viewModel.isConnected else { return }
                 while !Task.isCancelled && viewModel.isConnected {
@@ -556,6 +574,58 @@ struct ContentView: View {
     #else
         return false
 #endif
+    }
+}
+
+private struct SettingsView: View {
+    @ObservedObject var viewModel: ConnectionViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Tracing") {
+                    Toggle("Enable Trace Logging", isOn: Binding(
+                        get: { viewModel.traceEnabled },
+                        set: { viewModel.setTraceEnabled($0) }
+                    ))
+
+                    Text("When trace logging is off, trace export and clear buttons are hidden on the main screen.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Operation Mode") {
+                    ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
+                        Button {
+                            Task { await viewModel.setOperationMode(mode) }
+                        } label: {
+                            HStack {
+                                Text(mode.label)
+                                Spacer()
+                                if viewModel.operationMode == mode {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.accent)
+                                }
+                            }
+                        }
+                        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.operationMode == mode)
+                    }
+
+                    Text("Current mode: \(viewModel.operationMode.label)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
