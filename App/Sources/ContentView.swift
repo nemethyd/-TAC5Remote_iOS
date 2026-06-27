@@ -17,10 +17,15 @@ final class ConnectionViewModel: ObservableObject {
     @Published var operationMode: TAC5OperationMode = .ca
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
+    @Published var traceLogURL: URL?
 
     private var client: ModbusTCPClient?
     private var repository: TAC5Repository?
     private var isRefreshing = false
+
+    init() {
+        initializeTraceLog()
+    }
 
     func connect() async {
         guard !isBusy else { return }
@@ -29,12 +34,14 @@ final class ConnectionViewModel: ObservableObject {
             connection = try parseConnectionTarget()
         } catch {
             statusText = "Invalid connection format. Example: 192.168.10.80:502:1"
+            trace("connect failed: invalid connection format: \(connectionTarget)")
             return
         }
 
         isBusy = true
         defer { isBusy = false }
         statusText = "Connecting..."
+        trace("connect start host=\(connection.host) port=\(connection.port) unit=\(connection.unitId)")
 
         let config = ModbusTCPConfig(
             host: connection.host,
@@ -75,8 +82,10 @@ final class ConnectionViewModel: ObservableObject {
             }
             self.isConnected = true
             self.statusText = "Connected"
+            trace("connect success")
         } catch {
             self.statusText = "Connect/read failed: \(error.localizedDescription)"
+            trace("connect failed: \(error.localizedDescription)")
             await client.disconnect()
             self.isConnected = false
         }
@@ -113,10 +122,12 @@ final class ConnectionViewModel: ObservableObject {
             if updateStatus {
                 statusText = "Refreshed"
             }
+            trace("refresh success")
         } catch {
             if updateStatus {
                 statusText = "Refresh failed: \(error.localizedDescription)"
             }
+            trace("refresh failed: \(error.localizedDescription)")
         }
     }
 
@@ -131,6 +142,7 @@ final class ConnectionViewModel: ObservableObject {
         selectedPreset = .k1
         presetTargetByPreset = [:]
         statusText = "Disconnected"
+        trace("disconnect")
     }
 
     func setBoostEnabled(_ enabled: Bool) async {
@@ -146,8 +158,10 @@ final class ConnectionViewModel: ObservableObject {
                 boostEnabled = readBack
             }
             statusText = boostEnabled ? "Boost enabled" : "Boost disabled"
+            trace("boost write success value=\(boostEnabled ? 1 : 0)")
         } catch {
             statusText = "Boost write failed: \(error.localizedDescription)"
+            trace("boost write failed: \(error.localizedDescription)")
         }
     }
 
@@ -168,8 +182,10 @@ final class ConnectionViewModel: ObservableObject {
                 presetTargetByPreset[selectedPreset] = activeTarget
             }
             statusText = "Preset: \(selectedPreset.label)"
+            trace("preset switch success value=\(selectedPreset.rawValue)")
         } catch {
             statusText = "Preset switch failed: \(error.localizedDescription)"
+            trace("preset switch failed: \(error.localizedDescription)")
         }
     }
 
@@ -186,8 +202,10 @@ final class ConnectionViewModel: ObservableObject {
                 bypassEnabled = readBack
             }
             statusText = bypassEnabled ? "Bypass enabled" : "Bypass disabled"
+            trace("bypass write success value=\(bypassEnabled ? 1 : 0)")
         } catch {
             statusText = "Bypass write failed: \(error.localizedDescription)"
+            trace("bypass write failed: \(error.localizedDescription)")
         }
     }
 
@@ -204,8 +222,22 @@ final class ConnectionViewModel: ObservableObject {
                 operationMode = readBack
             }
             statusText = "Mode: \(operationMode.label)"
+            trace("mode switch success value=\(operationMode.rawValue)")
         } catch {
             statusText = "Mode switch failed: \(error.localizedDescription)"
+            trace("mode switch failed: \(error.localizedDescription)")
+        }
+    }
+
+    func clearTraceLog() {
+        guard let traceLogURL else { return }
+        do {
+            try "".write(to: traceLogURL, atomically: true, encoding: .utf8)
+            trace("trace log cleared")
+            statusText = "Trace log cleared"
+        } catch {
+            statusText = "Trace clear failed: \(error.localizedDescription)"
+            trace("trace clear failed: \(error.localizedDescription)")
         }
     }
 
@@ -236,6 +268,38 @@ final class ConnectionViewModel: ObservableObject {
         guard parts.count == 3, !parts[0].isEmpty else { throw ModbusError.invalidResponse }
         guard let port = UInt16(parts[1]), let unitId = UInt8(parts[2]) else { throw ModbusError.invalidResponse }
         return (host: parts[0], port: port, unitId: unitId)
+    }
+
+    private func initializeTraceLog() {
+        guard let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return
+        }
+
+        let url = cacheDir.appendingPathComponent("tac5_trace.log")
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        traceLogURL = url
+
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        trace("session start app=\(appVersion) build=\(buildNumber)")
+    }
+
+    private func trace(_ message: String) {
+        guard let traceLogURL else { return }
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "\(timestamp) \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+
+        do {
+            let handle = try FileHandle(forWritingTo: traceLogURL)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+            try handle.close()
+        } catch {
+            // Keep trace logging non-fatal for app behavior.
+        }
     }
 }
 
@@ -356,6 +420,22 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
+                }
+
+                HStack {
+                    if let traceURL = viewModel.traceLogURL {
+                        ShareLink(item: traceURL) {
+                            Label("Export Trace", systemImage: "square.and.arrow.up")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.bordered)
+                    }
+
+                    Button("Clear Trace") {
+                        viewModel.clearTraceLog()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
                 }
 
                 Text(viewModel.statusText)
