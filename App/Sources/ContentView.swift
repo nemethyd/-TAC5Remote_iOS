@@ -167,20 +167,26 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setPreset(_ preset: TAC5Preset) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, isConnected else { return }
         guard selectedPreset != preset else { return }
         isBusy = true
         defer { isBusy = false }
-        suppressRefreshUntil = Date().addingTimeInterval(1.0)
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
 
         do {
+            guard let repository else { throw ModbusError.connectionClosed }
             do {
                 try await repository.writePreset(preset)
             } catch {
                 if isTransientPresetError(error) {
                     trace("preset transient error; retrying once: \(error.localizedDescription)")
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    try await repository.writePreset(preset)
+                    suppressRefreshUntil = Date().addingTimeInterval(4.0)
+                    await reconnectAfterTransientPresetError()
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    guard let retryRepository = self.repository else {
+                        throw ModbusError.connectionClosed
+                    }
+                    try await retryRepository.writePreset(preset)
                 } else {
                     throw error
                 }
@@ -284,6 +290,30 @@ final class ConnectionViewModel: ObservableObject {
             return true
         default:
             return false
+        }
+    }
+
+    private func reconnectAfterTransientPresetError() async {
+        do {
+            let connection = try parseConnectionTarget()
+            await client?.disconnect()
+
+            let config = ModbusTCPConfig(
+                host: connection.host,
+                port: connection.port,
+                unitId: connection.unitId,
+                timeoutSeconds: 4
+            )
+
+            let newClient = ModbusTCPClient(config: config)
+            let newRepository = TAC5Repository(client: newClient)
+            _ = try await newRepository.readPreset()
+            self.client = newClient
+            self.repository = newRepository
+            self.isConnected = true
+            trace("preset retry reconnect success")
+        } catch {
+            trace("preset retry reconnect failed: \(error.localizedDescription)")
         }
     }
 
