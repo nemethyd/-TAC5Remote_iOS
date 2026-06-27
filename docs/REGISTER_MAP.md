@@ -3,6 +3,7 @@
 This is a working reference for the TAC5 / EOLE 4 Modbus map.
 
 Important indexing note:
+
 - The live Modbus reads in this repo use 0-based holding register offsets.
 - The vendor-style document addresses use 41xxx/42xxx references.
 - Both forms are listed below so the map is easier to cross-check.
