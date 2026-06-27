@@ -34,6 +34,7 @@ public struct TAC5Snapshot: Sendable {
 public enum TAC5Register: UInt16, CaseIterable {
     // Validated against live Mural dump (zero-based Modbus offsets).
     case t7 = 8
+    case presetTargetAirflow = 55
     case supplyAirflow = 64
     case exhaustAirflow = 72
     case presetWriteTrigger = 199
@@ -114,6 +115,10 @@ public actor TAC5Repository {
             return nil
         }
         return TAC5Preset(rawValue: raw)
+    }
+
+    public func readActivePresetTargetAirflow() async throws -> UInt16? {
+        try await readRegister(TAC5Register.presetTargetAirflow.rawValue)
     }
 
     public func writeBoostEnabled(_ enabled: Bool) async throws {

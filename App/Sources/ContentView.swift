@@ -14,6 +14,7 @@ final class ConnectionViewModel: ObservableObject {
     @Published var isBusy = false
     @Published var boostEnabled = false
     @Published var selectedPreset: TAC5Preset = .k1
+    @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
 
     private var client: ModbusTCPClient?
     private var repository: TAC5Repository?
@@ -49,6 +50,7 @@ final class ConnectionViewModel: ObservableObject {
             }
             let boostState = try await repository.readBoostEnabled()
             let preset = try await repository.readPreset()
+            let activeTarget = try await repository.readActivePresetTargetAirflow()
             self.client = client
             self.repository = repository
             self.snapshot = freshSnapshot
@@ -57,6 +59,9 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let preset {
                 self.selectedPreset = preset
+                if let activeTarget {
+                    self.presetTargetByPreset[preset] = activeTarget
+                }
             }
             self.isConnected = true
             self.statusText = "Kapcsolodva"
@@ -76,12 +81,16 @@ final class ConnectionViewModel: ObservableObject {
             let freshSnapshot = try await repository.readSnapshot()
             let boostState = try await repository.readBoostEnabled()
             let preset = try await repository.readPreset()
+            let activeTarget = try await repository.readActivePresetTargetAirflow()
             snapshot = freshSnapshot
             if let boostState {
                 self.boostEnabled = boostState
             }
             if let preset {
                 self.selectedPreset = preset
+                if let activeTarget {
+                    self.presetTargetByPreset[preset] = activeTarget
+                }
             }
             if updateStatus {
                 statusText = "Frissitve"
@@ -100,6 +109,7 @@ final class ConnectionViewModel: ObservableObject {
         isConnected = false
         boostEnabled = false
         selectedPreset = .k1
+        presetTargetByPreset = [:]
         statusText = "Lecsatlakozva"
     }
 
@@ -127,7 +137,11 @@ final class ConnectionViewModel: ObservableObject {
         do {
             try await repository.writePreset(preset)
             let readBack = try await repository.readPreset()
+            let activeTarget = try await repository.readActivePresetTargetAirflow()
             selectedPreset = readBack ?? preset
+            if let activeTarget {
+                presetTargetByPreset[selectedPreset] = activeTarget
+            }
             statusText = "Preset: \(selectedPreset.label)"
         } catch {
             statusText = "Sikertelen preset valtas: \(error.localizedDescription)"
@@ -202,19 +216,17 @@ struct ContentView: View {
 
                 HStack {
                     ForEach(TAC5Preset.allCases, id: \.rawValue) { preset in
-                        if viewModel.selectedPreset == preset {
-                            Button(preset.label) {
-                                Task { await viewModel.setPreset(preset) }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(true)
-                        } else {
-                            Button(preset.label) {
-                                Task { await viewModel.setPreset(preset) }
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(!viewModel.isConnected || viewModel.isBusy)
+                        Button {
+                            Task { await viewModel.setPreset(preset) }
+                        } label: {
+                            PresetButtonLabel(
+                                preset: preset,
+                                targetM3h: viewModel.presetTargetByPreset[preset],
+                                isSelected: viewModel.selectedPreset == preset
+                            )
                         }
+                        .buttonStyle(.plain)
+                        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.selectedPreset == preset)
                     }
 
                     Button(viewModel.boostEnabled ? "Boost ON" : "Boost OFF") {
@@ -229,7 +241,9 @@ struct ContentView: View {
                             if viewModel.isConnected {
                                 await viewModel.disconnect()
                             }
-                            closeApplication()
+                            await MainActor.run {
+                                closeApplication()
+                            }
                         }
                     }
                     .buttonStyle(.bordered)
@@ -294,8 +308,77 @@ struct ContentView: View {
 
     private func closeApplication() {
 #if canImport(UIKit)
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        let activeScene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })
+
+        let scene = activeScene
+            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+
+        guard let scene else { return }
         UIApplication.shared.requestSceneSessionDestruction(scene.session, options: nil, errorHandler: nil)
 #endif
+    }
+}
+
+private struct PresetButtonLabel: View {
+    let preset: TAC5Preset
+    let targetM3h: UInt16?
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            FanLevelIcon(blades: bladeCount)
+            Text(targetText)
+                .font(.caption2)
+                .foregroundStyle(isSelected ? .primary : .secondary)
+        }
+        .frame(minWidth: 58)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 1)
+        )
+    }
+
+    private var bladeCount: Int {
+        switch preset {
+        case .k1: return 3
+        case .k2: return 4
+        case .k3: return 5
+        }
+    }
+
+    private var targetText: String {
+        if let targetM3h {
+            return "\(targetM3h) m3/h"
+        }
+        return preset.label
+    }
+}
+
+private struct FanLevelIcon: View {
+    let blades: Int
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<blades, id: \.self) { index in
+                Circle()
+                    .fill(Color.primary)
+                    .frame(width: 8, height: 16)
+                    .offset(y: -7)
+                    .rotationEffect(.degrees((360.0 / Double(blades)) * Double(index)))
+            }
+
+            Circle()
+                .fill(Color.primary)
+                .frame(width: 5, height: 5)
+        }
+        .frame(width: 24, height: 24)
     }
 }
