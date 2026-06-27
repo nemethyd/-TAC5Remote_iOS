@@ -635,14 +635,27 @@ private struct SettingsView: View {
     private var modeButtonRow: some View {
         HStack(spacing: 8) {
             ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
-                Button(mode.label) {
-                    Task { await viewModel.setOperationMode(mode) }
-                }
-                .buttonStyle(viewModel.operationMode == mode ? .borderedProminent : .bordered)
-                .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.operationMode == mode)
+                modeButton(for: mode)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func modeButton(for mode: TAC5OperationMode) -> some View {
+        if viewModel.operationMode == mode {
+            Button(mode.label) {
+                Task { await viewModel.setOperationMode(mode) }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(true)
+        } else {
+            Button(mode.label) {
+                Task { await viewModel.setOperationMode(mode) }
+            }
+            .buttonStyle(.bordered)
+            .disabled(!viewModel.isConnected || viewModel.isBusy)
+        }
     }
 
     private var traceToggleBinding: Binding<Bool> {
