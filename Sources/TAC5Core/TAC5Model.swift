@@ -170,6 +170,8 @@ public actor TAC5Repository {
     public func writePreset(_ preset: TAC5Preset) async throws {
         // Observed device behavior: each K preset change writes 199=0, then 202=<preset>.
         try await client.writeSingleRegister(address: TAC5Register.presetWriteTrigger.rawValue, value: 0)
+        // Eole emits these writes with a small gap; mirroring that timing improves reliability.
+        try await Task.sleep(nanoseconds: 40_000_000)
         try await client.writeSingleRegister(address: TAC5Register.presetState.rawValue, value: preset.rawValue)
     }
 

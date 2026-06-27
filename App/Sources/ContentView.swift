@@ -22,6 +22,7 @@ final class ConnectionViewModel: ObservableObject {
     private var client: ModbusTCPClient?
     private var repository: TAC5Repository?
     private var isRefreshing = false
+    private var suppressRefreshUntil: Date = .distantPast
 
     init() {
         initializeTraceLog()
@@ -92,7 +93,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func refresh(updateStatus: Bool = true) async {
-        guard !isBusy, !isRefreshing, let repository else { return }
+        guard !isBusy, !isRefreshing, Date() >= suppressRefreshUntil, let repository else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
@@ -170,9 +171,20 @@ final class ConnectionViewModel: ObservableObject {
         guard selectedPreset != preset else { return }
         isBusy = true
         defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(1.0)
 
         do {
-            try await repository.writePreset(preset)
+            do {
+                try await repository.writePreset(preset)
+            } catch {
+                if isTransientPresetError(error) {
+                    trace("preset transient error; retrying once: \(error.localizedDescription)")
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    try await repository.writePreset(preset)
+                } else {
+                    throw error
+                }
+            }
             selectedPreset = preset
             // Match Eole behavior: do not force immediate readback right after preset write.
             // The periodic refresh loop will update PRESET_STATE and airflow once the unit settles.
@@ -263,6 +275,16 @@ final class ConnectionViewModel: ObservableObject {
         guard parts.count == 3, !parts[0].isEmpty else { throw ModbusError.invalidResponse }
         guard let port = UInt16(parts[1]), let unitId = UInt8(parts[2]) else { throw ModbusError.invalidResponse }
         return (host: parts[0], port: port, unitId: unitId)
+    }
+
+    private func isTransientPresetError(_ error: Error) -> Bool {
+        guard let modbusError = error as? ModbusError else { return false }
+        switch modbusError {
+        case .invalidResponse, .timeout, .connectionFailed, .connectionClosed:
+            return true
+        default:
+            return false
+        }
     }
 
     private func initializeTraceLog() {
