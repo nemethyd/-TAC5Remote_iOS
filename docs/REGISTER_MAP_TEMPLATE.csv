@@ -11,5 +11,6 @@ RATIO_EXH_SUP,42002,uint16,rw,0.01,ratio,likely confirmed from behavior
 AIRFLOW_I,42003,uint16,rw,1,m3_h,likely confirmed from behavior
 AIRFLOW_II,42004,uint16,rw,1,m3_h,likely confirmed from behavior
 PRESET_STATE,42005,uint16,rw,1,enum,K1=1; K2=2; K3=3 (confirmed)
+OPERATION_MODE,raw:425,uint16,rw,1,enum,confirmed: OFF=0; CA=1; LS=2; CP=4; value 3 unknown
 BYPASS_ENABLE,raw:222,uint16,rw,1,bool_like,FC06 write observed: 1=Bypass on; 0=Bypass off; document address TBD
 BOOST_ENABLE,raw:227,uint16,rw,1,bool_like,FC06 write observed: 1=Boost on; 0=Boost off; document address TBD

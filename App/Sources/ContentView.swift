@@ -14,6 +14,7 @@ final class ConnectionViewModel: ObservableObject {
     @Published var isBusy = false
     @Published var boostEnabled = false
     @Published var bypassEnabled = false
+    @Published var operationMode: TAC5OperationMode = .ca
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
 
@@ -27,7 +28,7 @@ final class ConnectionViewModel: ObservableObject {
         do {
             connection = try parseConnectionTarget()
         } catch {
-            statusText = "Hibas kapcsolat formatum. Minta: 192.168.10.80:502:1"
+            statusText = "Invalid connection format. Example: 192.168.10.80:502:1"
             return
         }
 
@@ -51,6 +52,7 @@ final class ConnectionViewModel: ObservableObject {
             }
             let boostState = try? await repository.readBoostEnabled()
             let bypassState = try? await repository.readBypassEnabled()
+            let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
             self.client = client
@@ -62,6 +64,9 @@ final class ConnectionViewModel: ObservableObject {
             if let bypassState {
                 self.bypassEnabled = bypassState
             }
+            if let mode {
+                self.operationMode = mode
+            }
             if let preset {
                 self.selectedPreset = preset
                 if let activeTarget {
@@ -69,9 +74,9 @@ final class ConnectionViewModel: ObservableObject {
                 }
             }
             self.isConnected = true
-            self.statusText = "Kapcsolodva"
+            self.statusText = "Connected"
         } catch {
-            self.statusText = "Sikertelen kapcsolat vagy olvasas: \(error.localizedDescription)"
+            self.statusText = "Connect/read failed: \(error.localizedDescription)"
             await client.disconnect()
             self.isConnected = false
         }
@@ -86,6 +91,7 @@ final class ConnectionViewModel: ObservableObject {
             let freshSnapshot = try await repository.readSnapshot()
             let boostState = try? await repository.readBoostEnabled()
             let bypassState = try? await repository.readBypassEnabled()
+            let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
             snapshot = freshSnapshot
@@ -95,6 +101,9 @@ final class ConnectionViewModel: ObservableObject {
             if let bypassState {
                 self.bypassEnabled = bypassState
             }
+            if let mode {
+                self.operationMode = mode
+            }
             if let preset {
                 self.selectedPreset = preset
                 if let activeTarget {
@@ -102,11 +111,11 @@ final class ConnectionViewModel: ObservableObject {
                 }
             }
             if updateStatus {
-                statusText = "Frissitve"
+                statusText = "Refreshed"
             }
         } catch {
             if updateStatus {
-                statusText = "Sikertelen frissites: \(error.localizedDescription)"
+                statusText = "Refresh failed: \(error.localizedDescription)"
             }
         }
     }
@@ -118,9 +127,10 @@ final class ConnectionViewModel: ObservableObject {
         isConnected = false
         boostEnabled = false
         bypassEnabled = false
+        operationMode = .ca
         selectedPreset = .k1
         presetTargetByPreset = [:]
-        statusText = "Lecsatlakozva"
+        statusText = "Disconnected"
     }
 
     func setBoostEnabled(_ enabled: Bool) async {
@@ -135,9 +145,9 @@ final class ConnectionViewModel: ObservableObject {
             if let readBack = try? await repository.readBoostEnabled() {
                 boostEnabled = readBack
             }
-            statusText = boostEnabled ? "Boost bekapcsolva" : "Boost kikapcsolva"
+            statusText = boostEnabled ? "Boost enabled" : "Boost disabled"
         } catch {
-            statusText = "Sikertelen Boost iras: \(error.localizedDescription)"
+            statusText = "Boost write failed: \(error.localizedDescription)"
         }
     }
 
@@ -149,15 +159,17 @@ final class ConnectionViewModel: ObservableObject {
 
         do {
             try await repository.writePreset(preset)
-            let readBack = try await repository.readPreset()
-            let activeTarget = try await repository.readActivePresetTargetAirflow()
-            selectedPreset = readBack ?? preset
+            selectedPreset = preset
+            if let readBack = try? await repository.readPreset() {
+                selectedPreset = readBack
+            }
+            let activeTarget = try? await repository.readActivePresetTargetAirflow()
             if let activeTarget {
                 presetTargetByPreset[selectedPreset] = activeTarget
             }
             statusText = "Preset: \(selectedPreset.label)"
         } catch {
-            statusText = "Sikertelen preset valtas: \(error.localizedDescription)"
+            statusText = "Preset switch failed: \(error.localizedDescription)"
         }
     }
 
@@ -173,9 +185,27 @@ final class ConnectionViewModel: ObservableObject {
             if let readBack = try? await repository.readBypassEnabled() {
                 bypassEnabled = readBack
             }
-            statusText = bypassEnabled ? "Bypass bekapcsolva" : "Bypass kikapcsolva"
+            statusText = bypassEnabled ? "Bypass enabled" : "Bypass disabled"
         } catch {
-            statusText = "Sikertelen bypass iras: \(error.localizedDescription)"
+            statusText = "Bypass write failed: \(error.localizedDescription)"
+        }
+    }
+
+    func setOperationMode(_ mode: TAC5OperationMode) async {
+        guard !isBusy, isConnected, let repository else { return }
+        guard operationMode != mode else { return }
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            try await repository.writeOperationMode(mode)
+            operationMode = mode
+            if let readBack = try? await repository.readOperationMode() {
+                operationMode = readBack
+            }
+            statusText = "Mode: \(operationMode.label)"
+        } catch {
+            statusText = "Mode switch failed: \(error.localizedDescription)"
         }
     }
 
@@ -229,7 +259,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                TextField("Pelda: 192.168.10.80:502:1", text: $viewModel.connectionTarget)
+                TextField("Example: 192.168.10.80:502:1", text: $viewModel.connectionTarget)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                     .textFieldStyle(.roundedBorder)
@@ -254,7 +284,7 @@ struct ContentView: View {
                             let didClose = await MainActor.run { closeApplication() }
                             if !didClose {
                                 await MainActor.run {
-                                    viewModel.statusText = "Kapcsolat bontva. iOS alatt az app bezarasa gombbal nem garantalhato."
+                                    viewModel.statusText = "Disconnected. iOS may not allow app close from button."
                                 }
                             }
                         }
@@ -262,6 +292,24 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .tint(.red)
                     .frame(maxWidth: .infinity)
+                }
+
+                HStack {
+                    ForEach(TAC5OperationMode.allCases, id: \.rawValue) { mode in
+                        if viewModel.operationMode == mode {
+                            Button(mode.label) {
+                                Task { await viewModel.setOperationMode(mode) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(true)
+                        } else {
+                            Button(mode.label) {
+                                Task { await viewModel.setOperationMode(mode) }
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!viewModel.isConnected || viewModel.isBusy)
+                        }
+                    }
                 }
 
                 HStack {

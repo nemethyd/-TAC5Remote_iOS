@@ -29,6 +29,7 @@ Important indexing note:
 | AIRFLOW_I | 55 | 42003 | rw | uint16 | 1 | m3_h | likely confirmed | K1 preset value observed at 200, Boost at 840 |
 | AIRFLOW_II | 56 | 42004 | rw | uint16 | 1 | m3_h | likely confirmed | K2 preset value observed at 300, Boost at 840 |
 | PRESET_STATE | 202 | 42005 | rw | uint16 | 1 | enum | confirmed | K1=1, K2=2, K3=3 |
+| OPERATION_MODE | 425 | - | rw | uint16 | 1 | enum | confirmed | OFF=0, CA=1, LS=2, CP=4 (capture-verified) |
 | BYPASS_ENABLE | 222 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Bypass on, 0 = Bypass off |
 | BOOST_ENABLE | 227 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Boost on, 0 = Boost off (validated in Wireshark) |
 
@@ -44,6 +45,8 @@ Important indexing note:
 - Boost toggle (multiple captures):
   - ON: 227=1
   - OFF: 227=0
+- Operation mode transitions (capture: mode_off_ca_ls_cp_confirm.pcapng):
+  - OFF -> CA -> LS -> CP -> OFF produced 425 values: 0 -> 1 -> 2 -> 4 -> 0
 
 ## Observed runtime behavior
 
@@ -74,3 +77,4 @@ Important indexing note:
 - Whether register 52 mirrors active preset for all firmware variants.
 - Whether AIRFLOW_I / II / III are three editable setpoints or a shared block with one active selector.
 - Whether Boost is a dedicated mode bit or an alternate setpoint profile.
+- What OPERATION_MODE value 3 means (currently unobserved; planned experiment).

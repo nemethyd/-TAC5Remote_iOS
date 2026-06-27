@@ -44,6 +44,7 @@ public enum TAC5Register: UInt16, CaseIterable {
     case t3 = 156
     case bypassEnable = 222
     case boostEnable = 227
+    case operationMode = 425
 }
 
 public enum TAC5Preset: UInt16, CaseIterable, Sendable {
@@ -56,6 +57,22 @@ public enum TAC5Preset: UInt16, CaseIterable, Sendable {
         case .k1: return "K1"
         case .k2: return "K2"
         case .k3: return "K3"
+        }
+    }
+}
+
+public enum TAC5OperationMode: UInt16, CaseIterable, Sendable {
+    case off = 0
+    case ca = 1
+    case ls = 2
+    case cp = 4
+
+    public var label: String {
+        switch self {
+        case .off: return "OFF"
+        case .ca: return "CA"
+        case .ls: return "LS"
+        case .cp: return "CP"
         }
     }
 }
@@ -129,6 +146,13 @@ public actor TAC5Repository {
         return raw == 1
     }
 
+    public func readOperationMode() async throws -> TAC5OperationMode? {
+        guard let raw = try await readRegister(TAC5Register.operationMode.rawValue) else {
+            return nil
+        }
+        return TAC5OperationMode(rawValue: raw)
+    }
+
     public func writeBoostEnabled(_ enabled: Bool) async throws {
         let value: UInt16 = enabled ? 1 : 0
         try await client.writeSingleRegister(address: TAC5Register.boostEnable.rawValue, value: value)
@@ -137,6 +161,10 @@ public actor TAC5Repository {
     public func writeBypassEnabled(_ enabled: Bool) async throws {
         let value: UInt16 = enabled ? 1 : 0
         try await client.writeSingleRegister(address: TAC5Register.bypassEnable.rawValue, value: value)
+    }
+
+    public func writeOperationMode(_ mode: TAC5OperationMode) async throws {
+        try await client.writeSingleRegister(address: TAC5Register.operationMode.rawValue, value: mode.rawValue)
     }
 
     public func writePreset(_ preset: TAC5Preset) async throws {
