@@ -174,13 +174,8 @@ final class ConnectionViewModel: ObservableObject {
         do {
             try await repository.writePreset(preset)
             selectedPreset = preset
-            if let readBack = try? await repository.readPreset() {
-                selectedPreset = readBack
-            }
-            let activeTarget = try? await repository.readActivePresetTargetAirflow()
-            if let activeTarget {
-                presetTargetByPreset[selectedPreset] = activeTarget
-            }
+            // Match Eole behavior: do not force immediate readback right after preset write.
+            // The periodic refresh loop will update PRESET_STATE and airflow once the unit settles.
             statusText = "Preset: \(selectedPreset.label)"
             trace("preset switch success value=\(selectedPreset.rawValue)")
         } catch {

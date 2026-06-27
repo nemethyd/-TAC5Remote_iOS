@@ -73,24 +73,30 @@ public actor ModbusTCPClient {
         try await ensureConnected()
         guard let connection else { throw ModbusError.connectionClosed }
 
-        let transactionId = nextTxId()
-        let request = buildADU(transactionId: transactionId, pdu: pdu)
+        do {
+            let transactionId = nextTxId()
+            let request = buildADU(transactionId: transactionId, pdu: pdu)
 
-        try await send(data: request, on: connection)
+            try await send(data: request, on: connection)
 
-        let mbapHeader = try await receiveExactly(count: 7, on: connection)
-        let responseTransactionId = UInt16(mbapHeader[0]) << 8 | UInt16(mbapHeader[1])
-        let protocolId = UInt16(mbapHeader[2]) << 8 | UInt16(mbapHeader[3])
-        let length = UInt16(mbapHeader[4]) << 8 | UInt16(mbapHeader[5])
-        let unitId = mbapHeader[6]
+            let mbapHeader = try await receiveExactly(count: 7, on: connection)
+            let responseTransactionId = UInt16(mbapHeader[0]) << 8 | UInt16(mbapHeader[1])
+            let protocolId = UInt16(mbapHeader[2]) << 8 | UInt16(mbapHeader[3])
+            let length = UInt16(mbapHeader[4]) << 8 | UInt16(mbapHeader[5])
+            let unitId = mbapHeader[6]
 
-        guard responseTransactionId == transactionId, protocolId == 0, unitId == config.unitId else {
-            throw ModbusError.invalidResponse
+            guard responseTransactionId == transactionId, protocolId == 0, unitId == config.unitId else {
+                throw ModbusError.invalidResponse
+            }
+
+            guard length >= 2 else { throw ModbusError.invalidResponse }
+            let pduLength = Int(length) - 1
+            return try await receiveExactly(count: pduLength, on: connection)
+        } catch {
+            // If frame parsing or timeout fails, reset the TCP stream to avoid byte misalignment.
+            disconnect()
+            throw error
         }
-
-        guard length >= 2 else { throw ModbusError.invalidResponse }
-        let pduLength = Int(length) - 1
-        return try await receiveExactly(count: pduLength, on: connection)
 #else
         _ = pdu
         throw ModbusError.unsupportedFunction
