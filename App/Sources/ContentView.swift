@@ -58,7 +58,7 @@ final class ConnectionViewModel: ObservableObject {
         }
     }
 
-    func refresh() async {
+    func refresh(updateStatus: Bool = true) async {
         guard !isBusy, let repository else { return }
         isBusy = true
         defer { isBusy = false }
@@ -70,9 +70,13 @@ final class ConnectionViewModel: ObservableObject {
             if let boostState {
                 self.boostEnabled = boostState
             }
-            statusText = "Frissitve"
+            if updateStatus {
+                statusText = "Frissitve"
+            }
         } catch {
-            statusText = "Sikertelen frissites: \(error.localizedDescription)"
+            if updateStatus {
+                statusText = "Sikertelen frissites: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -165,11 +169,6 @@ struct ContentView: View {
                     }
                     .disabled(viewModel.isBusy)
 
-                    Button("Refresh") {
-                        Task { await viewModel.refresh() }
-                    }
-                    .disabled(!viewModel.isConnected || viewModel.isBusy)
-
                     Button(viewModel.boostEnabled ? "Boost ON" : "Boost OFF") {
                         Task { await viewModel.setBoostEnabled(!viewModel.boostEnabled) }
                     }
@@ -188,12 +187,12 @@ struct ContentView: View {
                 Divider()
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    metricCard("T1", valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
-                    metricCard("T2", valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
-                    metricCard("T3", valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
-                    metricCard("T7", valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
-                    metricCard("Supply", valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
-                    metricCard("Exhaust", valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
+                    metricCard("Outdoor", valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
+                    metricCard("Supply", valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
+                    metricCard("Extract", valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
+                    metricCard("Exhaust", valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
+                    metricCard("Supply Airflow", valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
+                    metricCard("Exhaust Airflow", valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
                 }
 
                 Spacer(minLength: 0)
@@ -204,7 +203,14 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(16)
-            .navigationTitle("TAC5 Remote(#\(buildNumber))")
+            .navigationTitle("TAC5 Remote")
+            .task(id: viewModel.isConnected) {
+                guard viewModel.isConnected else { return }
+                while !Task.isCancelled && viewModel.isConnected {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    await viewModel.refresh(updateStatus: false)
+                }
+            }
         }
     }
 
