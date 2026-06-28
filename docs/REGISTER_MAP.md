@@ -23,11 +23,12 @@ Important indexing note:
 | T7 | 8 | 41004 | ro | int16 | 0.1 | C | confirmed | live sensor value |
 | SUPPLY_AIRFLOW | 64 | 41010 | ro | uint16 | 1 | m3_h | confirmed | live supply airflow |
 | EXHAUST_AIRFLOW | 72 | 41011 | ro | uint16 | 1 | m3_h | confirmed | live exhaust airflow |
-| WORKING_MODE | 52 | 42001 | rw | uint16 | 1 | enum | likely confirmed | active mode / preset index; K1=1, K2=2, K3=3, Boost observed as 1/3 transition |
+| WORKING_MODE | 52 | 42001 | rw | uint16 | 1 | enum | confirmed | active mode / preset index; repeatedly verified in capture/behavior; K1=1, K2=2, K3=3, Boost observed as 1/3 transition |
 | PRESET_WRITE_TRIGGER | 199 | - | rw | uint16 | 1 | trigger | confirmed | FC06 writes 0 before each preset change |
 | RATIO_EXH_SUP | 426 | TBD | rw | uint16 | 0.01 | ratio | likely confirmed | capture-verified write target for exhaust/supply ratio; app writes directly to this register |
-| AIRFLOW_I | 55 | 42003 | rw | uint16 | 1 | m3_h | likely confirmed | K1 preset value observed at 200, Boost at 840 |
-| AIRFLOW_II | 56 | 42004 | rw | uint16 | 1 | m3_h | likely confirmed | K2 preset value observed at 300, Boost at 840 |
+| AIRFLOW_I | 427 | TBD | rw | uint16 | 1 | m3_h | confirmed | CA mode supply setpoint I; capture-tested with 200 / 100 |
+| AIRFLOW_II | 428 | TBD | rw | uint16 | 1 | m3_h | confirmed | CA mode supply setpoint II; capture-tested with 400 / 200 |
+| AIRFLOW_III | 429 | TBD | rw | uint16 | 1 | m3_h | confirmed | CA mode supply setpoint III; capture-tested with 600 / 300 |
 | PRESET_STATE | 202 | 42005 | rw | uint16 | 1 | enum | confirmed | K1=1, K2=2, K3=3 |
 | OPERATION_MODE | 425 | - | rw | uint16 | 1 | enum | confirmed | OFF=0, CA=1, LS=2, CP=4 (capture-verified) |
 | BYPASS_ENABLE | 222 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Bypass on, 0 = Bypass off |
@@ -49,6 +50,8 @@ Important indexing note:
   - OFF -> CA -> LS -> CP -> OFF produced 425 values: 0 -> 1 -> 2 -> 4 -> 0
 - Exhaust/supply ratio edit (capture: ratio_test_100_90_80_100.pcapng):
   - FC06 writes observed at 426 with values 90, 80, and 100 during manual ratio edits
+- CA airflow setpoints edit (capture: Wan live write monitor):
+  - FC06 writes observed at 427, 428, 429 while changing CA supply setpoints 200/400/600 to 100/200/300 and back
 
 ## Observed runtime behavior
 

@@ -5,7 +5,7 @@ T3,41003,int16,ro,0.1,C,confirmed live read
 T4,41004,int16,ro,0.1,C,alias to T7 in app mapping
 SUPPLY_AIRFLOW,41010,uint16,ro,1,m3_h,confirmed live read
 EXHAUST_AIRFLOW,41011,uint16,ro,1,m3_h,confirmed live read
-WORKING_MODE,42001,uint16,rw,1,enum,likely confirmed from behavior; vendor mapping pending
+WORKING_MODE,42001,uint16,rw,1,enum,confirmed from repeated behavior/capture; vendor mapping pending
 PRESET_WRITE_TRIGGER,raw:199,uint16,rw,1,trigger,FC06: write 0 before each preset change
 RATIO_EXH_SUP,TBD,uint16,rw,0.01,ratio,capture-verified write target at raw offset 426; vendor address pending
 AIRFLOW_I,42003,uint16,rw,1,m3_h,likely confirmed from behavior

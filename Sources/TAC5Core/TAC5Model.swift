@@ -38,6 +38,9 @@ public enum TAC5Register: UInt16, CaseIterable {
     case supplyAirflow = 64
     case exhaustAirflow = 72
     case ratioExhSup = 426
+    case caAirflowI = 427
+    case caAirflowII = 428
+    case caAirflowIII = 429
     case presetWriteTrigger = 199
     case presetState = 202
     case t1 = 154
@@ -153,6 +156,30 @@ public actor TAC5Repository {
 
     public func writeExhaustSupplyRatio(_ ratioPercent: UInt16) async throws {
         try await client.writeSingleRegister(address: TAC5Register.ratioExhSup.rawValue, value: ratioPercent)
+    }
+
+    public func readCaAirflowI() async throws -> UInt16? {
+        try await readRegister(TAC5Register.caAirflowI.rawValue)
+    }
+
+    public func readCaAirflowII() async throws -> UInt16? {
+        try await readRegister(TAC5Register.caAirflowII.rawValue)
+    }
+
+    public func readCaAirflowIII() async throws -> UInt16? {
+        try await readRegister(TAC5Register.caAirflowIII.rawValue)
+    }
+
+    public func writeCaAirflowI(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: TAC5Register.caAirflowI.rawValue, value: value)
+    }
+
+    public func writeCaAirflowII(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: TAC5Register.caAirflowII.rawValue, value: value)
+    }
+
+    public func writeCaAirflowIII(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: TAC5Register.caAirflowIII.rawValue, value: value)
     }
 
     public func readOperationMode() async throws -> TAC5OperationMode? {

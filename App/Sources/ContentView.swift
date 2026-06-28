@@ -7,6 +7,8 @@ import UIKit
 
 @MainActor
 final class ConnectionViewModel: ObservableObject {
+    private let exhaustSupplyRatioLimits = 50...200
+
     @Published var connectionTarget = "192.168.10.80:502:1"
     @Published var statusText = "Disconnected"
     @Published var snapshot = TAC5Snapshot()
@@ -15,6 +17,9 @@ final class ConnectionViewModel: ObservableObject {
     @Published var boostEnabled = false
     @Published var bypassEnabled = false
     @Published var exhaustSupplyRatio: Double?
+    @Published var caAirflowI: UInt16?
+    @Published var caAirflowII: UInt16?
+    @Published var caAirflowIII: UInt16?
     @Published var operationMode: TAC5OperationMode = .ca
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
@@ -65,6 +70,9 @@ final class ConnectionViewModel: ObservableObject {
             let boostState = try? await repository.readBoostEnabled()
             let bypassState = try? await repository.readBypassEnabled()
             let ratioState = try? await repository.readExhaustSupplyRatio()
+            let caAirflowI = try? await repository.readCaAirflowI()
+            let caAirflowII = try? await repository.readCaAirflowII()
+            let caAirflowIII = try? await repository.readCaAirflowIII()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -79,6 +87,15 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let ratioState {
                 self.exhaustSupplyRatio = Double(ratioState)
+            }
+            if let caAirflowI {
+                self.caAirflowI = caAirflowI
+            }
+            if let caAirflowII {
+                self.caAirflowII = caAirflowII
+            }
+            if let caAirflowIII {
+                self.caAirflowIII = caAirflowIII
             }
             if let mode {
                 self.operationMode = mode
@@ -110,6 +127,9 @@ final class ConnectionViewModel: ObservableObject {
             let boostState = try? await repository.readBoostEnabled()
             let bypassState = try? await repository.readBypassEnabled()
             let ratioState = try? await repository.readExhaustSupplyRatio()
+            let caAirflowI = try? await repository.readCaAirflowI()
+            let caAirflowII = try? await repository.readCaAirflowII()
+            let caAirflowIII = try? await repository.readCaAirflowIII()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -122,6 +142,15 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let ratioState {
                 self.exhaustSupplyRatio = Double(ratioState)
+            }
+            if let caAirflowI {
+                self.caAirflowI = caAirflowI
+            }
+            if let caAirflowII {
+                self.caAirflowII = caAirflowII
+            }
+            if let caAirflowIII {
+                self.caAirflowIII = caAirflowIII
             }
             if let mode {
                 self.operationMode = mode
@@ -239,8 +268,8 @@ final class ConnectionViewModel: ObservableObject {
 
     func setExhaustSupplyRatio(_ ratioPercent: UInt16) async {
         guard !isBusy, isConnected, let repository else { return }
-        guard ratioPercent <= 100 else {
-            statusText = "Ratio must be between 0 and 100"
+        guard exhaustSupplyRatioLimits.contains(Int(ratioPercent)) else {
+            statusText = "Ratio must be between 50 and 200"
             trace("ratio write rejected: out of range value=\(ratioPercent)")
             return
         }
@@ -257,6 +286,27 @@ final class ConnectionViewModel: ObservableObject {
         } catch {
             statusText = "Ratio write failed: \(error.localizedDescription)"
             trace("ratio write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func setCaAirflowSetpoints(_ airflowI: UInt16, _ airflowII: UInt16, _ airflowIII: UInt16) async {
+        guard !isBusy, isConnected, let repository else { return }
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            try await repository.writeCaAirflowI(airflowI)
+            try await repository.writeCaAirflowII(airflowII)
+            try await repository.writeCaAirflowIII(airflowIII)
+            caAirflowI = airflowI
+            caAirflowII = airflowII
+            caAirflowIII = airflowIII
+            statusText = "CA airflow setpoints updated"
+            trace("ca airflow write success values=\(airflowI)/\(airflowII)/\(airflowIII)")
+        } catch {
+            statusText = "CA airflow write failed: \(error.localizedDescription)"
+            trace("ca airflow write failed: \(error.localizedDescription)")
         }
     }
 
@@ -551,8 +601,6 @@ struct ContentView: View {
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
                 }
 
-                ExhaustSupplyRatioEditor(viewModel: viewModel)
-
                 if viewModel.traceEnabled {
                     HStack {
                         if let traceURL = viewModel.traceLogURL {
@@ -706,7 +754,7 @@ private struct SettingsView: View {
             ExhaustSupplyRatioEditor(viewModel: viewModel)
 
             if viewModel.operationMode == .ca {
-                CAModeParametersPreview()
+                CAModeParametersEditor(viewModel: viewModel)
             } else {
                 Text("No mapped editable parameters for \(viewModel.operationMode.label) yet.")
                     .font(.footnote)
@@ -774,10 +822,10 @@ private struct ExhaustSupplyRatioEditor: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
-                TextField("0-100", text: $ratioText)
+                TextField("50-200", text: $ratioText)
                     .keyboardType(.numberPad)
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 110)
+                    .frame(maxWidth: 120)
 
                 Text("%")
                     .foregroundStyle(.secondary)
@@ -805,8 +853,13 @@ private struct ExhaustSupplyRatioEditor: View {
 
     private func applyRatio() {
         let trimmed = ratioText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let value = UInt16(trimmed), value <= 100 else {
-            viewModel.statusText = "Ratio must be between 0 and 100"
+        guard let value = UInt16(trimmed) else {
+            viewModel.statusText = "Ratio must be a whole number"
+            return
+        }
+
+        guard (50...200).contains(Int(value)) else {
+            viewModel.statusText = "Ratio must be between 50 and 200"
             return
         }
 
@@ -816,56 +869,69 @@ private struct ExhaustSupplyRatioEditor: View {
     }
 }
 
-private struct CAModeParametersPreview: View {
+private struct CAModeParametersEditor: View {
+    @ObservedObject var viewModel: ConnectionViewModel
+    @State private var airflowIText: String
+    @State private var airflowIIText: String
+    @State private var airflowIIIText: String
+
+    init(viewModel: ConnectionViewModel) {
+        self.viewModel = viewModel
+        _airflowIText = State(initialValue: String(viewModel.caAirflowI ?? 200))
+        _airflowIIText = State(initialValue: String(viewModel.caAirflowII ?? 400))
+        _airflowIIIText = State(initialValue: String(viewModel.caAirflowIII ?? 600))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            parameterLine(title: "Exhaust / Supply Ratio", supplyValue: "100", exhaustValue: nil, unit: "%")
-
-            HStack {
+            HStack(spacing: 8) {
                 Text("Parameter")
                     .font(.caption.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("Supply")
                     .font(.caption.weight(.semibold))
-                    .frame(width: 72, alignment: .center)
+                    .frame(width: 86, alignment: .center)
                 Text("Exhaust")
                     .font(.caption.weight(.semibold))
-                    .frame(width: 72, alignment: .center)
+                    .frame(width: 86, alignment: .center)
             }
 
-            parameterLine(title: "Airflow I", supplyValue: "200", exhaustValue: "200", unit: "m3/h")
-            parameterLine(title: "Airflow II", supplyValue: "300", exhaustValue: "300", unit: "m3/h")
-            parameterLine(title: "Airflow III", supplyValue: "400", exhaustValue: "400", unit: "m3/h")
+            airflowRow(title: "Airflow I", valueText: $airflowIText)
+            airflowRow(title: "Airflow II", valueText: $airflowIIText)
+            airflowRow(title: "Airflow III", valueText: $airflowIIIText)
 
-            Text("Layout preview only. Register mapping and write actions will be added after per-mode tests.")
+            Button("Apply CA airflow values") {
+                applyAirflowValues()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.isConnected || viewModel.isBusy)
+
+            Text("Supply values are editable in CA mode. Exhaust is calculated from the current ratio.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
-    private func parameterLine(title: String, supplyValue: String, exhaustValue: String?, unit: String) -> some View {
+    private func airflowRow(title: String, valueText: Binding<String>) -> some View {
         HStack(spacing: 8) {
             Text(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            valueBox(supplyValue)
+            TextField("Supply", text: valueText)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 86)
 
-            if let exhaustValue {
-                valueBox(exhaustValue)
-            }
-
-            Text(unit)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
+            valueBox(exhaustValue(for: valueText.wrappedValue))
         }
     }
 
     private func valueBox(_ value: String) -> some View {
         Text(value)
             .font(.body.monospacedDigit())
-            .frame(width: 72, height: 34)
+            .frame(width: 86, height: 34)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color.gray.opacity(0.12))
@@ -874,6 +940,31 @@ private struct CAModeParametersPreview: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.gray.opacity(0.25), lineWidth: 1)
             )
+    }
+
+    private func exhaustValue(for supplyText: String) -> String {
+        guard let supply = UInt16(supplyText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return "-"
+        }
+
+        let ratio = viewModel.exhaustSupplyRatio ?? 100
+        let exhaust = Double(supply) * ratio / 100.0
+        return String(format: "%.0f", exhaust)
+    }
+
+    private func applyAirflowValues() {
+        let trimmedI = airflowIText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedII = airflowIIText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedIII = airflowIIIText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let airflowI = UInt16(trimmedI), let airflowII = UInt16(trimmedII), let airflowIII = UInt16(trimmedIII) else {
+            viewModel.statusText = "CA airflow values must be whole numbers"
+            return
+        }
+
+        Task {
+            await viewModel.setCaAirflowSetpoints(airflowI, airflowII, airflowIII)
+        }
     }
 }
 
