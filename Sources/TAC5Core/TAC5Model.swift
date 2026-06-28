@@ -155,7 +155,11 @@ public actor TAC5Repository {
         guard let raw = try await readRegister(TAC5Register.boostEnable.rawValue) else {
             return nil
         }
-        return raw == 1
+        return raw != 0
+    }
+
+    public func readBoostRaw() async throws -> UInt16? {
+        try await readRegister(TAC5Register.boostEnable.rawValue)
     }
 
     public func readPreset() async throws -> TAC5Preset? {

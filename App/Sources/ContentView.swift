@@ -80,7 +80,7 @@ final class ConnectionViewModel: ObservableObject {
             let freshSnapshot = try await withConnectTimeout(seconds: 8) {
                 try await repository.readSnapshot()
             }
-            let boostState = try? await repository.readBoostEnabled()
+            let boostRaw = try? await repository.readBoostRaw()
             let bypassState = try? await repository.readBypassEnabled()
             let ratioState = try? await repository.readExhaustSupplyRatio()
             let caAirflowI = try? await repository.readCaAirflowI()
@@ -102,8 +102,9 @@ final class ConnectionViewModel: ObservableObject {
             self.client = client
             self.repository = repository
             self.snapshot = freshSnapshot
-            if let boostState {
-                self.boostEnabled = boostState
+            if let boostRaw {
+                self.boostEnabled = boostRaw != 0
+                trace("monitor 227 boost=\(boostRaw)")
             }
             if let bypassState {
                 self.bypassEnabled = bypassState
@@ -177,7 +178,7 @@ final class ConnectionViewModel: ObservableObject {
 
         do {
             let freshSnapshot = try await repository.readSnapshot()
-            let boostState = try? await repository.readBoostEnabled()
+            let boostRaw = try? await repository.readBoostRaw()
             let bypassState = try? await repository.readBypassEnabled()
             let ratioState = try? await repository.readExhaustSupplyRatio()
             let caAirflowI = try? await repository.readCaAirflowI()
@@ -197,8 +198,9 @@ final class ConnectionViewModel: ObservableObject {
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
             snapshot = freshSnapshot
-            if let boostState {
-                self.boostEnabled = boostState
+            if let boostRaw {
+                self.boostEnabled = boostRaw != 0
+                trace("monitor 227 boost=\(boostRaw)")
             }
             if let bypassState {
                 self.bypassEnabled = bypassState
@@ -292,8 +294,9 @@ final class ConnectionViewModel: ObservableObject {
             try await repository.writeBoostEnabled(enabled)
             // Some units accept write but reject immediate readback for this register.
             boostEnabled = enabled
-            if let readBack = try? await repository.readBoostEnabled() {
-                boostEnabled = readBack
+            if let readBackRaw = try? await repository.readBoostRaw() {
+                boostEnabled = readBackRaw != 0
+                trace("boost readback raw=\(readBackRaw)")
             }
             statusText = boostEnabled ? "Boost enabled" : "Boost disabled"
             trace("boost write success value=\(boostEnabled ? 1 : 0)")
@@ -415,7 +418,7 @@ final class ConnectionViewModel: ObservableObject {
         k3Mode: TAC5LSK3Mode,
         k3SleepFactor: UInt16
     ) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, isConnected, repository != nil else { return }
         guard lsVoltageLimits.contains(Int(vmin)), lsVoltageLimits.contains(Int(vmax)) else {
             statusText = "LS voltages must be between 0.0 V and 10.0 V"
             return
@@ -753,9 +756,9 @@ final class ConnectionViewModel: ObservableObject {
             let targetRaw = try? await repository.readLsK3TargetSideRaw()
             let readBack = try? await repository.readLsK3Mode()
 
-            let enabledText = enabledRaw.flatMap { $0.map(String.init) } ?? "nil"
-            let targetText = targetRaw.flatMap { $0.map(String.init) } ?? "nil"
-            let modeText = readBack.flatMap { $0?.label } ?? "nil"
+            let enabledText = enabledRaw.map(String.init) ?? "nil"
+            let targetText = targetRaw.map(String.init) ?? "nil"
+            let modeText = readBack?.label ?? "nil"
             trace("ls k3 mode readback attempt=\(attempt) enable=\(enabledText) target=\(targetText) mode=\(modeText)")
 
             if let readBack {
