@@ -11,6 +11,7 @@ OPERATION_MODE,raw:425,uint16,rw,1,enum,confirmed: OFF=0; CA=1; LS=2; CP=4; valu
 BYPASS_ENABLE,raw:222,uint16,rw,1,bool_like,FC06 write observed: 1=Bypass on; 0=Bypass off; document address TBD
 BOOST_ENABLE,raw:227,uint16,rw,1,bool_like,FC06 write observed: 1=Boost on; 0=Boost off; document address TBD
 PRESET_WRITE_TRIGGER,raw:199,uint16,rw,1,trigger,FC06: write 0 before each preset change
+MANUAL_SCHEDULE_MODE,raw:199,uint16,rw,1,enum,confirmed manual/schedule selector; 0=Manual; 2=Schedule; raw 200 appears companion reset/commit
 RATIO_EXH_SUP,TBD,uint16,rw,0.01,ratio,capture-verified write target at raw offset 426; vendor address pending
 AIRFLOW_I,TBD,uint16,rw,1,m3_h,confirmed CA mode supply setpoint I at raw offset 427
 AIRFLOW_II,TBD,uint16,rw,1,m3_h,confirmed CA mode supply setpoint II at raw offset 428

@@ -35,6 +35,7 @@ Ordering principle for the table below:
 | BOOST_ENABLE | 227 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Boost on, 0 = Boost off (validated in Wireshark) |
 | BYPASS_ENABLE | 222 | - | rw | uint16 | 1 | bool-like | confirmed | FC06 write single register: 1 = Bypass on, 0 = Bypass off |
 | PRESET_WRITE_TRIGGER | 199 | - | rw | uint16 | 1 | trigger | confirmed | FC06 writes 0 before each preset change |
+| MANUAL_SCHEDULE_MODE | 199 | - | rw | uint16 | 1 | enum | confirmed | manual / schedule selector; repeated isolated captures showed 0 = Manual and 2 = Schedule |
 | RATIO_EXH_SUP | 426 | TBD | rw | uint16 | 0.01 | ratio | likely confirmed | capture-verified write target for exhaust/supply ratio; app writes directly to this register |
 | AIRFLOW_I | 427 | TBD | rw | uint16 | 1 | m3_h | confirmed | CA mode supply setpoint I; capture-tested with 200 / 100 |
 | AIRFLOW_II | 428 | TBD | rw | uint16 | 1 | m3_h | confirmed | CA mode supply setpoint II; capture-tested with 400 / 200 |
@@ -61,6 +62,10 @@ Ordering principle for the table below:
   - K3 -> K1: 199=0, then 202=1
   - K1 -> K2: 199=0, then 202=2
   - K2 -> K3: 199=0, then 202=3
+- Manual / schedule selector (captures: manual_to_schedule_only_20260628_live.pcapng, schedule_to_manual_only_20260628_live.pcapng, manual_schedule_confirm_20260628_live.pcapng):
+  - Manual -> Schedule produced 199=2
+  - Schedule -> Manual produced 199=0 and companion 200=0
+  - Best-fit interpretation is 199 = MANUAL_SCHEDULE_MODE with 0 = Manual and 2 = Schedule; 200 appears to be a companion reset/commit field rather than the primary selector
 - Bypass toggle (capture: bypass_test_capture.pcapng):
   - ON: 222=1
   - OFF: 222=0
@@ -109,6 +114,7 @@ Ordering principle for the table below:
 - The Eole/TACTouch UI can emit intermediate artifact writes while editing LS/K3 fields; current evidence suggests these are UI side effects, not values the app should intentionally mirror.
 - The CP `CP on` field is separate from the LS K3 `504/583` pair; CP uses register 442.
 - The CP `Pressure / Airflow` selector still has no confirmed standalone write; current evidence suggests it may only affect how other CP fields are interpreted or when writes are committed.
+- The app is currently behaving well for manual settings; the remaining uncertainty is focused on selector-style fields rather than the already-mapped manual parameter writes.
 
 ## Open questions
 
