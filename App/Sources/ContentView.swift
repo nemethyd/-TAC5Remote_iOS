@@ -521,7 +521,8 @@ final class ConnectionViewModel: ObservableObject {
                 try await $0.writeLsK3Mode(mode)
             }
 
-            let confirmed = await readLsK3ModeConfirmed(from: repository, expected: mode)
+            let confirmationRepository = self.repository ?? repository
+            let confirmed = await readLsK3ModeConfirmed(from: confirmationRepository, expected: mode)
             if confirmed != mode {
                 if let confirmed {
                     lsK3Mode = confirmed
@@ -747,8 +748,17 @@ final class ConnectionViewModel: ObservableObject {
     private func readLsK3ModeConfirmed(from repository: TAC5Repository, expected: TAC5LSK3Mode) async -> TAC5LSK3Mode? {
         var lastRead: TAC5LSK3Mode?
 
-        for _ in 0..<3 {
-            if let readBack = try? await repository.readLsK3Mode() {
+        for attempt in 1...3 {
+            let enabledRaw = try? await repository.readLsK3EnableRaw()
+            let targetRaw = try? await repository.readLsK3TargetSideRaw()
+            let readBack = try? await repository.readLsK3Mode()
+
+            let enabledText = enabledRaw.flatMap { $0.map(String.init) } ?? "nil"
+            let targetText = targetRaw.flatMap { $0.map(String.init) } ?? "nil"
+            let modeText = readBack.flatMap { $0?.label } ?? "nil"
+            trace("ls k3 mode readback attempt=\(attempt) enable=\(enabledText) target=\(targetText) mode=\(modeText)")
+
+            if let readBack {
                 lastRead = readBack
                 if readBack == expected {
                     return readBack
@@ -997,7 +1007,7 @@ struct ContentView: View {
     }
 
     private func closeApplication() -> Bool {
-#if canImport(UIKit)
+#if targetEnvironment(macCatalyst)
         let activeScene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first(where: { $0.activationState == .foregroundActive })
@@ -1005,8 +1015,14 @@ struct ContentView: View {
         let scene = activeScene
             ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
 
-        guard let scene else { return false }
-        UIApplication.shared.requestSceneSessionDestruction(scene.session, options: nil, errorHandler: nil)
+        if let scene {
+            UIApplication.shared.requestSceneSessionDestruction(scene.session, options: nil, errorHandler: nil)
+        }
+
+        // For Catalyst utility-style usage, ensure the app actually exits after scene teardown.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            exit(0)
+        }
         return true
     #else
         return false

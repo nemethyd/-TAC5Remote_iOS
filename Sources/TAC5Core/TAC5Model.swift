@@ -261,6 +261,14 @@ public actor TAC5Repository {
         return targetRaw == 0 ? .exhaust : .supply
     }
 
+    public func readLsK3EnableRaw() async throws -> UInt16? {
+        try await readRegister(lsK3EnableRegister)
+    }
+
+    public func readLsK3TargetSideRaw() async throws -> UInt16? {
+        try await readRegister(lsK3TargetSideRegister)
+    }
+
     public func writeLsVmin(_ value: UInt16) async throws {
         try await client.writeSingleRegister(address: lsVminRegister, value: value)
     }
