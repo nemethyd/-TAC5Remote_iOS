@@ -508,6 +508,30 @@ final class ConnectionViewModel: ObservableObject {
         }
     }
 
+    func setLsK3Mode(_ mode: TAC5LSK3Mode) async {
+        guard !isBusy, isConnected, let repository else { return }
+
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            trace("ls k3 mode apply start value=\(mode.label)")
+            try await performLsWriteStep("K3Mode") {
+                try await $0.writeLsK3Mode(mode)
+            }
+            lsK3Mode = mode
+            if let readBack = try? await repository.readLsK3Mode() {
+                lsK3Mode = readBack
+            }
+            statusText = "LS K3 mode: \(lsK3Mode.label)"
+            trace("ls k3 mode write success value=\(lsK3Mode.label)")
+        } catch {
+            statusText = "LS K3 mode write failed: \(error.localizedDescription)"
+            trace("ls k3 mode write failed: \(error.localizedDescription)")
+        }
+    }
+
     func setOperationMode(_ mode: TAC5OperationMode) async {
         guard !isBusy, isConnected, let repository else { return }
         guard operationMode != mode else { return }
@@ -1047,6 +1071,8 @@ private struct SettingsView: View {
 private struct ExhaustSupplyRatioEditor: View {
     @ObservedObject var viewModel: ConnectionViewModel
     @State private var ratioText: String
+    @State private var wasRatioFocused = false
+    @FocusState private var isRatioFocused: Bool
 
     init(viewModel: ConnectionViewModel) {
         self.viewModel = viewModel
@@ -1065,15 +1091,10 @@ private struct ExhaustSupplyRatioEditor: View {
                     .keyboardType(.numberPad)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 120)
+                    .focused($isRatioFocused)
 
                 Text("%")
                     .foregroundStyle(.secondary)
-
-                Button("Apply") {
-                    applyRatio()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!viewModel.isConnected || viewModel.isBusy)
 
                 Spacer(minLength: 0)
             }
@@ -1083,6 +1104,16 @@ private struct ExhaustSupplyRatioEditor: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+        .onChange(of: isRatioFocused) { isFocused in
+            if wasRatioFocused && !isFocused {
+                applyRatio()
+            }
+            wasRatioFocused = isFocused
+        }
+        .onChange(of: viewModel.exhaustSupplyRatio) { newValue in
+            guard !isRatioFocused, let newValue else { return }
+            ratioText = String(Int(newValue.rounded()))
+        }
     }
 
     private var currentText: String {
@@ -1311,7 +1342,7 @@ private struct LSModeParametersEditor: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: k3Mode) { _ in
-                applyLsSettings()
+                applyK3ModeOnly()
             }
 
             ExhaustSupplyRatioEditor(viewModel: viewModel)
@@ -1330,6 +1361,11 @@ private struct LSModeParametersEditor: View {
                 applyLsSettings()
             }
             lastFocusedField = newValue
+        }
+        .onChange(of: viewModel.lsK3Mode) { newValue in
+            if k3Mode != newValue {
+                k3Mode = newValue
+            }
         }
     }
 
@@ -1416,6 +1452,15 @@ private struct LSModeParametersEditor: View {
                 k3Mode: k3Mode,
                 k3SleepFactor: k3SleepFactor
             )
+        }
+    }
+
+    private func applyK3ModeOnly() {
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
+        guard k3Mode != viewModel.lsK3Mode else { return }
+
+        Task {
+            await viewModel.setLsK3Mode(k3Mode)
         }
     }
 
