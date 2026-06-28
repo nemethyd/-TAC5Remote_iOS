@@ -459,24 +459,24 @@ final class ConnectionViewModel: ObservableObject {
                     try await $0.writeLsAirflowAtVmax(airflowAtVmax)
                 }
             }
-            if self.lsStopIfBelowVlow != stopIfBelowVlow {
-                try await performLsWriteStep("StopBelowVlow") {
-                    try await $0.writeLsStopIfBelowVlow(stopIfBelowVlow)
-                }
-            }
-            if self.lsVlow != vlow {
-                try await performLsWriteStep("Vlow") {
-                    try await $0.writeLsVlow(vlow)
-                }
-            }
             if self.lsStopIfAboveVhigh != stopIfAboveVhigh {
                 try await performLsWriteStep("StopAboveVhigh") {
                     try await $0.writeLsStopIfAboveVhigh(stopIfAboveVhigh)
                 }
             }
-            if self.lsVhigh != vhigh {
+            if stopIfAboveVhigh, self.lsVhigh != vhigh {
                 try await performLsWriteStep("Vhigh") {
                     try await $0.writeLsVhigh(vhigh)
+                }
+            }
+            if self.lsStopIfBelowVlow != stopIfBelowVlow {
+                try await performLsWriteStep("StopBelowVlow") {
+                    try await $0.writeLsStopIfBelowVlow(stopIfBelowVlow)
+                }
+            }
+            if stopIfBelowVlow, self.lsVlow != vlow {
+                try await performLsWriteStep("Vlow") {
+                    try await $0.writeLsVlow(vlow)
                 }
             }
             if self.lsK3Mode != k3Mode {
@@ -1109,10 +1109,18 @@ private struct ExhaustSupplyRatioEditor: View {
 }
 
 private struct CAModeParametersEditor: View {
+    private enum CAField: Hashable {
+        case airflowI
+        case airflowII
+        case airflowIII
+    }
+
     @ObservedObject var viewModel: ConnectionViewModel
     @State private var airflowIText: String
     @State private var airflowIIText: String
     @State private var airflowIIIText: String
+    @State private var lastFocusedField: CAField?
+    @FocusState private var focusedField: CAField?
 
     init(viewModel: ConnectionViewModel) {
         self.viewModel = viewModel
@@ -1135,25 +1143,41 @@ private struct CAModeParametersEditor: View {
                     .frame(width: 86, alignment: .center)
             }
 
-            airflowRow(title: "Airflow I", valueText: $airflowIText)
-            airflowRow(title: "Airflow II", valueText: $airflowIIText)
-            airflowRow(title: "Airflow III", valueText: $airflowIIIText)
-
-            Button("Apply CA airflow values") {
-                applyAirflowValues()
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!viewModel.isConnected || viewModel.isBusy)
+            airflowRow(title: "Airflow I", valueText: $airflowIText, field: .airflowI)
+            airflowRow(title: "Airflow II", valueText: $airflowIIText, field: .airflowII)
+            airflowRow(title: "Airflow III", valueText: $airflowIIIText, field: .airflowIII)
 
             Text("Supply values are editable in CA mode. Exhaust is calculated from the current ratio.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            Text("CA values are auto-applied when a field loses focus.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+        .onChange(of: focusedField) { newValue in
+            if let previous = lastFocusedField, previous != newValue {
+                applyAirflowValues()
+            }
+            lastFocusedField = newValue
+        }
+        .onChange(of: viewModel.caAirflowI) { newValue in
+            guard focusedField != .airflowI, let newValue else { return }
+            airflowIText = String(newValue)
+        }
+        .onChange(of: viewModel.caAirflowII) { newValue in
+            guard focusedField != .airflowII, let newValue else { return }
+            airflowIIText = String(newValue)
+        }
+        .onChange(of: viewModel.caAirflowIII) { newValue in
+            guard focusedField != .airflowIII, let newValue else { return }
+            airflowIIIText = String(newValue)
+        }
     }
 
     @ViewBuilder
-    private func airflowRow(title: String, valueText: Binding<String>) -> some View {
+    private func airflowRow(title: String, valueText: Binding<String>, field: CAField) -> some View {
         HStack(spacing: 8) {
             Text(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1162,6 +1186,7 @@ private struct CAModeParametersEditor: View {
                 .keyboardType(.numberPad)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 86)
+                .focused($focusedField, equals: field)
 
             valueBox(exhaustValue(for: valueText.wrappedValue))
         }
@@ -1192,6 +1217,7 @@ private struct CAModeParametersEditor: View {
     }
 
     private func applyAirflowValues() {
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
         let trimmedI = airflowIText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedII = airflowIIText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedIII = airflowIIIText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1208,6 +1234,16 @@ private struct CAModeParametersEditor: View {
 }
 
 private struct LSModeParametersEditor: View {
+    private enum LSField: Hashable {
+        case vmin
+        case vmax
+        case airflowAtVmin
+        case airflowAtVmax
+        case vlow
+        case vhigh
+        case k3SleepFactor
+    }
+
     @ObservedObject var viewModel: ConnectionViewModel
     @State private var vminText: String
     @State private var vmaxText: String
@@ -1219,6 +1255,8 @@ private struct LSModeParametersEditor: View {
     @State private var stopIfBelowVlow: Bool
     @State private var stopIfAboveVhigh: Bool
     @State private var k3Mode: TAC5LSK3Mode
+    @State private var lastFocusedField: LSField?
+    @FocusState private var focusedField: LSField?
 
     init(viewModel: ConnectionViewModel) {
         self.viewModel = viewModel
@@ -1245,16 +1283,26 @@ private struct LSModeParametersEditor: View {
                     .frame(width: 96, alignment: .center)
             }
 
-            lsValueRow(title: "Vmin", text: $vminText, suffix: "V")
-            lsValueRow(title: "Vmax", text: $vmaxText, suffix: "V")
-            lsValueRow(title: "Airflow @Vmin", text: $airflowAtVminText, suffix: "m3/h")
-            lsValueRow(title: "Airflow @Vmax", text: $airflowAtVmaxText, suffix: "m3/h")
+            lsValueRow(title: "Vmin", text: $vminText, suffix: "V", field: .vmin)
+            lsValueRow(title: "Vmax", text: $vmaxText, suffix: "V", field: .vmax)
+            lsValueRow(title: "Airflow @Vmin", text: $airflowAtVminText, suffix: "m3/h", field: .airflowAtVmin)
+            lsValueRow(title: "Airflow @Vmax", text: $airflowAtVmaxText, suffix: "m3/h", field: .airflowAtVmax)
 
             Toggle("Stop fans if V < Vlow", isOn: $stopIfBelowVlow)
-            lsValueRow(title: "Vlow", text: $vlowText, suffix: "V")
+                .onChange(of: stopIfBelowVlow) { _ in
+                    applyLsSettings()
+                }
+            if stopIfBelowVlow {
+                lsValueRow(title: "Vlow", text: $vlowText, suffix: "V", field: .vlow)
+            }
 
             Toggle("Stop fans if V > Vhigh", isOn: $stopIfAboveVhigh)
-            lsValueRow(title: "Vhigh", text: $vhighText, suffix: "V")
+                .onChange(of: stopIfAboveVhigh) { _ in
+                    applyLsSettings()
+                }
+            if stopIfAboveVhigh {
+                lsValueRow(title: "Vhigh", text: $vhighText, suffix: "V", field: .vhigh)
+            }
 
             Picker("0-10V on K3", selection: $k3Mode) {
                 ForEach(TAC5LSK3Mode.allCases, id: \.label) { mode in
@@ -1262,24 +1310,31 @@ private struct LSModeParametersEditor: View {
                 }
             }
             .pickerStyle(.segmented)
+            .onChange(of: k3Mode) { _ in
+                applyLsSettings()
+            }
 
             ExhaustSupplyRatioEditor(viewModel: viewModel)
 
             if k3Mode == .no {
-                lsValueRow(title: "% on K3 (sleep factor)", text: $k3SleepFactorText, suffix: "%")
+                lsValueRow(title: "% on K3 (sleep factor)", text: $k3SleepFactorText, suffix: "%", field: .k3SleepFactor)
             }
 
-            Button("Apply LS settings") {
-                applyLsSettings()
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!viewModel.isConnected || viewModel.isBusy)
+            Text("LS values are auto-applied when a field loses focus.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+        .onChange(of: focusedField) { newValue in
+            if let previous = lastFocusedField, previous != newValue {
+                applyLsSettings()
+            }
+            lastFocusedField = newValue
+        }
     }
 
     @ViewBuilder
-    private func lsValueRow(title: String, text: Binding<String>, suffix: String) -> some View {
+    private func lsValueRow(title: String, text: Binding<String>, suffix: String, field: LSField) -> some View {
         HStack(spacing: 8) {
             Text(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1288,6 +1343,7 @@ private struct LSModeParametersEditor: View {
                 .keyboardType(.decimalPad)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 96)
+                .focused($focusedField, equals: field)
 
             Text(suffix)
                 .foregroundStyle(.secondary)
@@ -1296,17 +1352,55 @@ private struct LSModeParametersEditor: View {
     }
 
     private func applyLsSettings() {
-        guard
-            let vmin = Self.parseVoltage(vminText),
-            let vmax = Self.parseVoltage(vmaxText),
-            let airflowAtVmin = UInt16(airflowAtVminText.trimmingCharacters(in: .whitespacesAndNewlines)),
-            let airflowAtVmax = UInt16(airflowAtVmaxText.trimmingCharacters(in: .whitespacesAndNewlines)),
-            let vlow = Self.parseVoltage(vlowText),
-            let vhigh = Self.parseVoltage(vhighText),
-            let k3SleepFactor = UInt16(k3SleepFactorText.trimmingCharacters(in: .whitespacesAndNewlines))
-        else {
-            viewModel.statusText = "LS values must be numeric"
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
+        guard let vmin = Self.parseVoltage(vminText) else {
+            viewModel.statusText = "Vmin must be numeric (0.0-10.0 V)"
             return
+        }
+        guard let vmax = Self.parseVoltage(vmaxText) else {
+            viewModel.statusText = "Vmax must be numeric (0.0-10.0 V)"
+            return
+        }
+        guard let airflowAtVmin = UInt16(airflowAtVminText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            viewModel.statusText = "Airflow @Vmin must be numeric"
+            return
+        }
+        guard let airflowAtVmax = UInt16(airflowAtVmaxText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            viewModel.statusText = "Airflow @Vmax must be numeric"
+            return
+        }
+
+        let vlow: UInt16
+        if stopIfBelowVlow {
+            guard let parsedVlow = Self.parseVoltage(vlowText) else {
+                viewModel.statusText = "Vlow must be numeric (0.0-10.0 V)"
+                return
+            }
+            vlow = parsedVlow
+        } else {
+            vlow = viewModel.lsVlow ?? 0
+        }
+
+        let vhigh: UInt16
+        if stopIfAboveVhigh {
+            guard let parsedVhigh = Self.parseVoltage(vhighText) else {
+                viewModel.statusText = "Vhigh must be numeric (0.0-10.0 V)"
+                return
+            }
+            vhigh = parsedVhigh
+        } else {
+            vhigh = viewModel.lsVhigh ?? 100
+        }
+
+        let k3SleepFactor: UInt16
+        if k3Mode == .no {
+            guard let parsedSleep = UInt16(k3SleepFactorText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                viewModel.statusText = "Sleep factor must be numeric"
+                return
+            }
+            k3SleepFactor = parsedSleep
+        } else {
+            k3SleepFactor = viewModel.lsK3SleepFactor ?? 100
         }
 
         Task {
@@ -1326,15 +1420,25 @@ private struct LSModeParametersEditor: View {
     }
 
     private static func parseVoltage(_ text: String) -> UInt16? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
-        guard let value = Double(trimmed) else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // Accept both decimal separators regardless of active keyboard locale.
+        let normalized = trimmed.replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(normalized) else { return nil }
         let scaled = (value * 10.0).rounded()
         guard scaled >= 0, scaled <= 100 else { return nil }
         return UInt16(scaled)
     }
 
     private static func voltageText(_ rawValue: UInt16) -> String {
-        String(format: "%.1f", Double(rawValue) / 10.0)
+        let value = Double(rawValue) / 10.0
+        let formatter = NumberFormatter()
+        formatter.locale = .current
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f", value)
     }
 }
 
