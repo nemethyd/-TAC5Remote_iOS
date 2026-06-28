@@ -1333,7 +1333,7 @@ private struct CPModeParametersEditor: View {
         .padding(.vertical, 4)
         .onChange(of: focusedField) { newValue in
             if let previous = lastFocusedField, previous != newValue {
-                applySleepFactor()
+                applyField(previous)
             }
             lastFocusedField = newValue
         }
@@ -1510,6 +1510,19 @@ private struct CPModeParametersEditor: View {
 
         Task {
             await viewModel.setCpExhaustVoltage(value)
+        }
+    }
+
+    private func applyField(_ field: CPField) {
+        switch field {
+        case .sleepFactor:
+            applySleepFactor()
+        case .singleVoltage:
+            applySingleVoltage()
+        case .supplyVoltage:
+            applySupplyVoltage()
+        case .exhaustVoltage:
+            applyExhaustVoltage()
         }
     }
 
