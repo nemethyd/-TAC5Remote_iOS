@@ -25,4 +25,8 @@ LS_STOP_IF_ABOVE_VHIGH,TBD,uint16,rw,1,bool_like,confirmed LS high-threshold sto
 LS_VHIGH,TBD,uint16,rw,0.1,V,confirmed LS high stop threshold at raw offset 503; 9.5 V -> 95; 10.0 V -> 100
 LS_K3_010V_ENABLE,TBD,uint16,rw,1,bool_like,confirmed K3 0-10V master enable at raw offset 504; clean capture showed 0=No and 1=enabled
 LS_K3_SLEEP_FACTOR,TBD,uint16,rw,1,percent,likely confirmed K3 sleep factor at raw offset 441; Eole emitted intermediate 1 before final writes 90 and 100
+CP_ON_MODE,TBD,uint16,rw,1,enum,confirmed CP `CP on` selector at raw offset 442; 0=Supply; 1=Exhaust; 2=Supply / Exhaust
+CP_SUPPLY_VOLTAGE,TBD,uint16,rw,0.1,V,confirmed CP voltage field at raw offset 445; single-side mode and Supply side in Supply/Exhaust mode
+CP_EXHAUST_VOLTAGE,TBD,uint16,rw,0.1,V,confirmed CP Exhaust voltage field at raw offset 448 in Supply/Exhaust mode
 LS_K3_TARGET_SIDE,TBD,uint16,rw,1,enum,confirmed K3 target-side selector at raw offset 583; clean capture showed 0=Exhaust and 1=Supply
+CP_START_AIRFLOW,TBD,uint16,rw,1,m3_h,likely confirmed CP Airflow-mode Start setpoint at raw offset 253; observed write 10 followed by auto-reset to 0

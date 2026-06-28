@@ -49,7 +49,11 @@ Ordering principle for the table below:
 | LS_VHIGH | 503 | TBD | rw | uint16 | 0.1 | V | confirmed | LS mode high stop threshold; clean capture showed raw values 95 and 100 for 9.5 V and 10.0 V |
 | LS_K3_010V_ENABLE | 504 | TBD | rw | uint16 | 1 | bool-like | confirmed | K3 0-10V mode master enable; clean capture showed No -> enabled -> No as 0/1/0 |
 | LS_K3_SLEEP_FACTOR | 441 | TBD | rw | uint16 | 1 | percent | likely confirmed | K3 sleep factor; editable in K3=No mode; Eole UI emitted intermediate value 1 before final writes 90 and 100 |
+| CP_ON_MODE | 442 | TBD | rw | uint16 | 1 | enum | confirmed | CP mode `CP on` selector; capture-tested transitions showed 0 = Supply, 1 = Exhaust, 2 = Supply / Exhaust |
+| CP_SUPPLY_VOLTAGE | 445 | TBD | rw | uint16 | 0.1 | V | confirmed | CP voltage field; raw value 9 observed for 0.9 V in Supply mode, and raw value 5 for 0.5 V in Supply / Exhaust mode |
+| CP_EXHAUST_VOLTAGE | 448 | TBD | rw | uint16 | 0.1 | V | confirmed | CP Exhaust voltage field in Supply / Exhaust mode; raw value 9 observed for 0.9 V |
 | LS_K3_TARGET_SIDE | 583 | TBD | rw | uint16 | 1 | enum | confirmed | K3 target side when 0-10V on K3 is enabled; clean capture showed 0 = Exhaust and 1 = Supply |
+| CP_START_AIRFLOW | 253 | TBD | rw | uint16 | 1 | m3_h | likely confirmed | CP Airflow-mode start setpoint; isolated capture showed write 10 followed by automatic reset to 0 |
 
 ## Confirmed write sequences (capture-based)
 
@@ -87,6 +91,14 @@ Ordering principle for the table below:
 - LS K3 mode final confirmation (capture: ls_k3_mode_confirm.pcapng):
   - No -> Exhaust -> No produced 504=1, 583=0, then 504=0
   - No -> Supply -> No produced 504=1, 583=1, then 504=0
+- CP `CP on` selector (capture: cp_on_mapping_20260628_live.pcapng):
+  - Supply -> Exhaust -> Supply / Exhaust -> Supply produced writes 442=1, 442=2, 442=0
+  - Best-fit interpretation is 442 = CP_ON_MODE with 0 = Supply, 1 = Exhaust, 2 = Supply / Exhaust
+- CP voltage fields (captures: cp_supply_voltage_only_20260628_live.pcapng, cp_exhaust_voltage_only_20260628_live.pcapng, cp_supply_exhaust_mode_validation_20260628_live.pcapng):
+  - 445 carries the CP voltage field in single-side mode and the Supply voltage field in Supply / Exhaust mode; observed writes included 5 and 9
+  - 448 carries the Exhaust voltage field in Supply / Exhaust mode; observed writes included 9 and 0
+- CP airflow start setpoint (capture: cp_pressure_start_combo_20260628_live.pcapng):
+  - 253 received a write of 10, then returned to 0 automatically; likely the Airflow-mode `Start` setpoint field
 
 ## Observed runtime behavior
 
@@ -95,6 +107,8 @@ Ordering principle for the table below:
 - The app writes boost as a single FC06 command to register 227.
 - The exhaust/supply ratio behaves as a shared/global parameter across modes rather than a CA-only value.
 - The Eole/TACTouch UI can emit intermediate artifact writes while editing LS/K3 fields; current evidence suggests these are UI side effects, not values the app should intentionally mirror.
+- The CP `CP on` field is separate from the LS K3 `504/583` pair; CP uses register 442.
+- The CP `Pressure / Airflow` selector still has no confirmed standalone write; current evidence suggests it may only affect how other CP fields are interpreted or when writes are committed.
 
 ## Open questions
 

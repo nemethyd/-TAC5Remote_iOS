@@ -33,6 +33,10 @@ final class ConnectionViewModel: ObservableObject {
     @Published var lsVhigh: UInt16?
     @Published var lsK3Mode: TAC5LSK3Mode = .no
     @Published var lsK3SleepFactor: UInt16?
+    @Published var cpOnMode: TAC5CPOnMode = .supply
+    @Published var cpSupplyVoltage: UInt16?
+    @Published var cpExhaustVoltage: UInt16?
+    @Published var cpStartAirflow: UInt16?
     @Published var operationMode: TAC5OperationMode = .ca
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
@@ -96,6 +100,10 @@ final class ConnectionViewModel: ObservableObject {
             let lsVhigh = try? await repository.readLsVhigh()
             let lsK3Mode = try? await repository.readLsK3Mode()
             let lsK3SleepFactor = try? await repository.readLsK3SleepFactor()
+            let cpOnMode = try? await repository.readCpOnMode()
+            let cpSupplyVoltage = try? await repository.readCpSupplyVoltage()
+            let cpExhaustVoltage = try? await repository.readCpExhaustVoltage()
+            let cpStartAirflow = try? await repository.readCpStartAirflow()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -151,6 +159,18 @@ final class ConnectionViewModel: ObservableObject {
             if let lsK3SleepFactor {
                 self.lsK3SleepFactor = lsK3SleepFactor
             }
+            if let cpOnMode {
+                self.cpOnMode = cpOnMode
+            }
+            if let cpSupplyVoltage {
+                self.cpSupplyVoltage = cpSupplyVoltage
+            }
+            if let cpExhaustVoltage {
+                self.cpExhaustVoltage = cpExhaustVoltage
+            }
+            if let cpStartAirflow {
+                self.cpStartAirflow = cpStartAirflow
+            }
             if let mode {
                 self.operationMode = mode
             }
@@ -194,6 +214,10 @@ final class ConnectionViewModel: ObservableObject {
             let lsVhigh = try? await repository.readLsVhigh()
             let lsK3Mode = try? await repository.readLsK3Mode()
             let lsK3SleepFactor = try? await repository.readLsK3SleepFactor()
+            let cpOnMode = try? await repository.readCpOnMode()
+            let cpSupplyVoltage = try? await repository.readCpSupplyVoltage()
+            let cpExhaustVoltage = try? await repository.readCpExhaustVoltage()
+            let cpStartAirflow = try? await repository.readCpStartAirflow()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -246,6 +270,18 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let lsK3SleepFactor {
                 self.lsK3SleepFactor = lsK3SleepFactor
+            }
+            if let cpOnMode {
+                self.cpOnMode = cpOnMode
+            }
+            if let cpSupplyVoltage {
+                self.cpSupplyVoltage = cpSupplyVoltage
+            }
+            if let cpExhaustVoltage {
+                self.cpExhaustVoltage = cpExhaustVoltage
+            }
+            if let cpStartAirflow {
+                self.cpStartAirflow = cpStartAirflow
             }
             if let mode {
                 self.operationMode = mode
@@ -542,6 +578,103 @@ final class ConnectionViewModel: ObservableObject {
             statusText = "LS K3 mode write failed: \(error.localizedDescription)"
             trace("ls k3 mode write failed: \(error.localizedDescription)")
         }
+    }
+
+    func setLsK3SleepFactor(_ value: UInt16) async {
+        guard !isBusy, isConnected, repository != nil else { return }
+        guard lsSleepFactorLimits.contains(Int(value)) else {
+            statusText = "Sleep factor must be between 0 and 100"
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            trace("ls k3 sleep factor apply start value=\(value)")
+            try await performLsWriteStep("K3SleepFactor") {
+                try await $0.writeLsK3SleepFactor(value)
+            }
+            lsK3SleepFactor = value
+            statusText = "LS K3 sleep factor: \(value)%"
+            trace("ls k3 sleep factor write success value=\(value)")
+        } catch {
+            statusText = "LS K3 sleep factor write failed: \(error.localizedDescription)"
+            trace("ls k3 sleep factor write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func setCpOnMode(_ mode: TAC5CPOnMode) async {
+        guard !isBusy, isConnected, let repository else { return }
+
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            trace("cp on apply start value=\(mode.label)")
+            try await repository.writeCpOnMode(mode)
+            cpOnMode = mode
+            if let readBack = try? await repository.readCpOnMode() {
+                cpOnMode = readBack
+            }
+            statusText = "CP on: \(cpOnMode.label)"
+            trace("cp on write success value=\(cpOnMode.label)")
+        } catch {
+            statusText = "CP on write failed: \(error.localizedDescription)"
+            trace("cp on write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func setCpSupplyVoltage(_ value: UInt16) async {
+        guard !isBusy, isConnected, let repository else { return }
+        guard lsVoltageLimits.contains(Int(value)) else {
+            statusText = "CP voltage must be between 0.0 V and 10.0 V"
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            trace("cp supply voltage apply start value=\(value)")
+            try await repository.writeCpSupplyVoltage(value)
+            cpSupplyVoltage = value
+            statusText = "CP supply voltage: \(Self.formatVoltage(value)) V"
+            trace("cp supply voltage write success value=\(value)")
+        } catch {
+            statusText = "CP supply voltage write failed: \(error.localizedDescription)"
+            trace("cp supply voltage write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func setCpExhaustVoltage(_ value: UInt16) async {
+        guard !isBusy, isConnected, let repository else { return }
+        guard lsVoltageLimits.contains(Int(value)) else {
+            statusText = "CP voltage must be between 0.0 V and 10.0 V"
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            trace("cp exhaust voltage apply start value=\(value)")
+            try await repository.writeCpExhaustVoltage(value)
+            cpExhaustVoltage = value
+            statusText = "CP exhaust voltage: \(Self.formatVoltage(value)) V"
+            trace("cp exhaust voltage write success value=\(value)")
+        } catch {
+            statusText = "CP exhaust voltage write failed: \(error.localizedDescription)"
+            trace("cp exhaust voltage write failed: \(error.localizedDescription)")
+        }
+    }
+
+    private static func formatVoltage(_ value: UInt16) -> String {
+        String(format: "%.1f", Double(value) / 10.0)
     }
 
     func setOperationMode(_ mode: TAC5OperationMode) async {
@@ -1085,6 +1218,8 @@ private struct SettingsView: View {
                 }
             } else if viewModel.operationMode == .ls {
                 LSModeParametersEditor(viewModel: viewModel)
+            } else if viewModel.operationMode == .cp {
+                CPModeParametersEditor(viewModel: viewModel)
             } else {
                 Text("No mapped editable parameters for \(viewModel.operationMode.label) yet.")
                     .font(.footnote)
@@ -1135,6 +1270,268 @@ private struct SettingsView: View {
     }
 }
 
+private struct CPModeParametersEditor: View {
+    private enum CPInitMode: String, CaseIterable {
+        case airflow = "Airflow"
+        case pressure = "Pressure"
+    }
+
+    private enum CPField: Hashable {
+        case sleepFactor
+        case singleVoltage
+        case supplyVoltage
+        case exhaustVoltage
+    }
+
+    @ObservedObject var viewModel: ConnectionViewModel
+    @State private var cpOnMode: TAC5CPOnMode
+    @State private var initializeMode: CPInitMode = .airflow
+    @State private var sleepFactorText: String
+    @State private var singleVoltageText: String
+    @State private var supplyVoltageText: String
+    @State private var exhaustVoltageText: String
+    @State private var suppressModeAutoApply = false
+    @State private var lastFocusedField: CPField?
+    @FocusState private var focusedField: CPField?
+
+    init(viewModel: ConnectionViewModel) {
+        self.viewModel = viewModel
+        _cpOnMode = State(initialValue: viewModel.cpOnMode)
+        _sleepFactorText = State(initialValue: String(viewModel.lsK3SleepFactor ?? 100))
+        _singleVoltageText = State(initialValue: Self.voltageText(viewModel.cpSupplyVoltage ?? 0))
+        _supplyVoltageText = State(initialValue: Self.voltageText(viewModel.cpSupplyVoltage ?? 0))
+        _exhaustVoltageText = State(initialValue: Self.voltageText(viewModel.cpExhaustVoltage ?? 0))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("CP on", selection: $cpOnMode) {
+                ForEach(TAC5CPOnMode.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: cpOnMode) { _ in
+                if suppressModeAutoApply {
+                    suppressModeAutoApply = false
+                    return
+                }
+                applyCpOnMode()
+            }
+
+            if cpOnMode != .supplyExhaust {
+                ExhaustSupplyRatioEditor(viewModel: viewModel)
+                cpSleepFactorRow
+            }
+
+            cpInitializePressureSection
+
+            Text("CP on uses the confirmed raw register 442 mapping. Voltage fields are capture-confirmed; Pressure/Airflow selector is still read-only until its register mapping is confirmed.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+        .onChange(of: focusedField) { newValue in
+            if let previous = lastFocusedField, previous != newValue {
+                applySleepFactor()
+            }
+            lastFocusedField = newValue
+        }
+        .onChange(of: viewModel.cpOnMode) { newValue in
+            if cpOnMode != newValue {
+                suppressModeAutoApply = true
+                cpOnMode = newValue
+            }
+        }
+        .onChange(of: viewModel.lsK3SleepFactor) { newValue in
+            guard focusedField != .sleepFactor, let newValue else { return }
+            sleepFactorText = String(newValue)
+        }
+        .onChange(of: viewModel.cpSupplyVoltage) { newValue in
+            guard focusedField != .singleVoltage, focusedField != .supplyVoltage, let newValue else { return }
+            singleVoltageText = Self.voltageText(newValue)
+            supplyVoltageText = Self.voltageText(newValue)
+        }
+        .onChange(of: viewModel.cpExhaustVoltage) { newValue in
+            guard focusedField != .exhaustVoltage, let newValue else { return }
+            exhaustVoltageText = Self.voltageText(newValue)
+        }
+    }
+
+    private var cpSleepFactorRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("% on K3 (sleep factor)")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                TextField("0-100", text: $sleepFactorText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 96)
+                    .focused($focusedField, equals: .sleepFactor)
+
+                Text("%")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, alignment: .leading)
+            }
+
+            HStack {
+                Spacer(minLength: 0)
+                Button("Apply CP") {
+                    applySleepFactor()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+            }
+        }
+    }
+
+    private var cpInitializePressureSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Initialize the pressure")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Picker("Initialize the pressure", selection: $initializeMode) {
+                    ForEach(CPInitMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(true)
+                .frame(maxWidth: 260)
+            }
+
+            if cpOnMode == .supplyExhaust {
+                cpVoltageRow(title: "Supply", text: $supplyVoltageText, field: .supplyVoltage) {
+                    applySupplyVoltage()
+                }
+                cpVoltageRow(title: "Exhaust", text: $exhaustVoltageText, field: .exhaustVoltage) {
+                    applyExhaustVoltage()
+                }
+            } else {
+                cpVoltageRow(title: cpOnMode.label, text: $singleVoltageText, field: .singleVoltage) {
+                    applySingleVoltage()
+                }
+            }
+        }
+    }
+
+    private func cpVoltageRow(title: String, text: Binding<String>, field: CPField, apply: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .frame(width: 80, alignment: .leading)
+
+            TextField("0,0", text: text)
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 72)
+                .focused($focusedField, equals: field)
+
+            Text("V")
+                .foregroundStyle(.secondary)
+
+            Text("Start")
+                .foregroundStyle(.secondary)
+                .frame(width: 72, height: 36)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.gray.opacity(0.08)))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.gray.opacity(0.15), lineWidth: 1))
+
+            Text(viewModel.cpStartAirflow.map(String.init) ?? "0")
+                .font(.body.monospacedDigit())
+                .frame(width: 64, height: 36)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.gray.opacity(0.08)))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.gray.opacity(0.25), lineWidth: 1))
+
+            Text("m3/h")
+                .foregroundStyle(.secondary)
+
+            Button("Apply") {
+                apply()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!viewModel.isConnected || viewModel.isBusy)
+        }
+    }
+
+    private func applyCpOnMode() {
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
+        guard cpOnMode != viewModel.cpOnMode else { return }
+
+        Task {
+            await viewModel.setCpOnMode(cpOnMode)
+        }
+    }
+
+    private func applySleepFactor() {
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
+        guard let value = UInt16(sleepFactorText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            viewModel.statusText = "Sleep factor must be numeric"
+            return
+        }
+
+        Task {
+            await viewModel.setLsK3SleepFactor(value)
+        }
+    }
+
+    private func applySingleVoltage() {
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
+        guard let value = Self.parseVoltage(singleVoltageText) else {
+            viewModel.statusText = "CP voltage must be numeric (0.0-10.0 V)"
+            return
+        }
+
+        Task {
+            await viewModel.setCpSupplyVoltage(value)
+        }
+    }
+
+    private func applySupplyVoltage() {
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
+        guard let value = Self.parseVoltage(supplyVoltageText) else {
+            viewModel.statusText = "Supply voltage must be numeric (0.0-10.0 V)"
+            return
+        }
+
+        Task {
+            await viewModel.setCpSupplyVoltage(value)
+        }
+    }
+
+    private func applyExhaustVoltage() {
+        guard viewModel.isConnected, !viewModel.isBusy else { return }
+        guard let value = Self.parseVoltage(exhaustVoltageText) else {
+            viewModel.statusText = "Exhaust voltage must be numeric (0.0-10.0 V)"
+            return
+        }
+
+        Task {
+            await viewModel.setCpExhaustVoltage(value)
+        }
+    }
+
+    private static func parseVoltage(_ text: String) -> UInt16? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(trimmed) else { return nil }
+        let scaled = (value * 10.0).rounded()
+        guard scaled >= 0, scaled <= 100 else { return nil }
+        return UInt16(scaled)
+    }
+
+    private static func voltageText(_ rawValue: UInt16) -> String {
+        let value = Double(rawValue) / 10.0
+        let formatter = NumberFormatter()
+        formatter.locale = .current
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f", value)
+    }
+}
+
 private struct ExhaustSupplyRatioEditor: View {
     @ObservedObject var viewModel: ConnectionViewModel
     @State private var ratioText: String
@@ -1172,7 +1569,7 @@ private struct ExhaustSupplyRatioEditor: View {
 
             HStack {
                 Spacer(minLength: 0)
-                Button("Apply now") {
+                Button("Apply ratio") {
                     applyRatio()
                 }
                 .buttonStyle(.bordered)
@@ -1265,7 +1662,7 @@ private struct CAModeParametersEditor: View {
 
             HStack {
                 Spacer(minLength: 0)
-                Button("Apply now") {
+                Button("Apply airflow") {
                     applyAirflowValues()
                 }
                 .buttonStyle(.bordered)
@@ -1449,7 +1846,7 @@ private struct LSModeParametersEditor: View {
 
             HStack {
                 Spacer(minLength: 0)
-                Button("Apply now") {
+                Button("Apply LS") {
                     applyLsSettings()
                 }
                 .buttonStyle(.bordered)

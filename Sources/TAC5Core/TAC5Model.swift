@@ -95,6 +95,20 @@ public enum TAC5LSK3Mode: Sendable, CaseIterable {
     }
 }
 
+public enum TAC5CPOnMode: UInt16, Sendable, CaseIterable {
+    case supply = 0
+    case exhaust = 1
+    case supplyExhaust = 2
+
+    public var label: String {
+        switch self {
+        case .supply: return "Supply"
+        case .exhaust: return "Exhaust"
+        case .supplyExhaust: return "Supply / Exhaust"
+        }
+    }
+}
+
 public struct TAC5Codec {
     public init() {}
 
@@ -118,6 +132,10 @@ public actor TAC5Repository {
     private let lsAirflowAtVminRegister: UInt16 = 439
     private let lsAirflowAtVmaxRegister: UInt16 = 440
     private let lsK3SleepFactorRegister: UInt16 = 441
+    private let cpOnRegister: UInt16 = 442
+    private let cpSupplyVoltageRegister: UInt16 = 445
+    private let cpStartAirflowRegister: UInt16 = 253
+    private let cpExhaustVoltageRegister: UInt16 = 448
     private let lsStopIfBelowVlowRegister: UInt16 = 500
     private let lsVlowRegister: UInt16 = 501
     private let lsStopIfAboveVhighRegister: UInt16 = 502
@@ -232,6 +250,25 @@ public actor TAC5Repository {
         try await readRegister(lsK3SleepFactorRegister)
     }
 
+    public func readCpOnMode() async throws -> TAC5CPOnMode? {
+        guard let raw = try await readRegister(cpOnRegister) else {
+            return nil
+        }
+        return TAC5CPOnMode(rawValue: raw)
+    }
+
+    public func readCpSupplyVoltage() async throws -> UInt16? {
+        try await readRegister(cpSupplyVoltageRegister)
+    }
+
+    public func readCpExhaustVoltage() async throws -> UInt16? {
+        try await readRegister(cpExhaustVoltageRegister)
+    }
+
+    public func readCpStartAirflow() async throws -> UInt16? {
+        try await readRegister(cpStartAirflowRegister)
+    }
+
     public func readLsStopIfBelowVlow() async throws -> Bool? {
         guard let raw = try await readRegister(lsStopIfBelowVlowRegister) else {
             return nil
@@ -291,6 +328,22 @@ public actor TAC5Repository {
 
     public func writeLsK3SleepFactor(_ value: UInt16) async throws {
         try await client.writeSingleRegister(address: lsK3SleepFactorRegister, value: value)
+    }
+
+    public func writeCpOnMode(_ mode: TAC5CPOnMode) async throws {
+        try await client.writeSingleRegister(address: cpOnRegister, value: mode.rawValue)
+    }
+
+    public func writeCpSupplyVoltage(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: cpSupplyVoltageRegister, value: value)
+    }
+
+    public func writeCpExhaustVoltage(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: cpExhaustVoltageRegister, value: value)
+    }
+
+    public func writeCpStartAirflow(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: cpStartAirflowRegister, value: value)
     }
 
     public func writeLsStopIfBelowVlow(_ enabled: Bool) async throws {
