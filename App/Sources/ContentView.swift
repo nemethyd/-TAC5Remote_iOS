@@ -438,17 +438,56 @@ final class ConnectionViewModel: ObservableObject {
         suppressRefreshUntil = Date().addingTimeInterval(2.0)
 
         do {
-            try await repository.writeLsVmin(vmin)
-            try await repository.writeLsVmax(vmax)
-            try await repository.writeLsAirflowAtVmin(airflowAtVmin)
-            try await repository.writeLsAirflowAtVmax(airflowAtVmax)
-            try await repository.writeLsStopIfBelowVlow(stopIfBelowVlow)
-            try await repository.writeLsVlow(vlow)
-            try await repository.writeLsStopIfAboveVhigh(stopIfAboveVhigh)
-            try await repository.writeLsVhigh(vhigh)
-            try await repository.writeLsK3Mode(k3Mode)
-            if k3Mode == .no {
-                try await repository.writeLsK3SleepFactor(k3SleepFactor)
+            trace("ls settings apply start vmin=\(vmin) vmax=\(vmax) airflowMin=\(airflowAtVmin) airflowMax=\(airflowAtVmax) stopLow=\(stopIfBelowVlow ? 1 : 0) vlow=\(vlow) stopHigh=\(stopIfAboveVhigh ? 1 : 0) vhigh=\(vhigh) k3=\(k3Mode.label) sleep=\(k3SleepFactor)")
+            if self.lsVmin != vmin {
+                try await performLsWriteStep("Vmin") {
+                    try await $0.writeLsVmin(vmin)
+                }
+            }
+            if self.lsVmax != vmax {
+                try await performLsWriteStep("Vmax") {
+                    try await $0.writeLsVmax(vmax)
+                }
+            }
+            if self.lsAirflowAtVmin != airflowAtVmin {
+                try await performLsWriteStep("Airflow@Vmin") {
+                    try await $0.writeLsAirflowAtVmin(airflowAtVmin)
+                }
+            }
+            if self.lsAirflowAtVmax != airflowAtVmax {
+                try await performLsWriteStep("Airflow@Vmax") {
+                    try await $0.writeLsAirflowAtVmax(airflowAtVmax)
+                }
+            }
+            if self.lsStopIfBelowVlow != stopIfBelowVlow {
+                try await performLsWriteStep("StopBelowVlow") {
+                    try await $0.writeLsStopIfBelowVlow(stopIfBelowVlow)
+                }
+            }
+            if self.lsVlow != vlow {
+                try await performLsWriteStep("Vlow") {
+                    try await $0.writeLsVlow(vlow)
+                }
+            }
+            if self.lsStopIfAboveVhigh != stopIfAboveVhigh {
+                try await performLsWriteStep("StopAboveVhigh") {
+                    try await $0.writeLsStopIfAboveVhigh(stopIfAboveVhigh)
+                }
+            }
+            if self.lsVhigh != vhigh {
+                try await performLsWriteStep("Vhigh") {
+                    try await $0.writeLsVhigh(vhigh)
+                }
+            }
+            if self.lsK3Mode != k3Mode {
+                try await performLsWriteStep("K3Mode") {
+                    try await $0.writeLsK3Mode(k3Mode)
+                }
+            }
+            if k3Mode == .no, self.lsK3SleepFactor != k3SleepFactor {
+                try await performLsWriteStep("K3SleepFactor") {
+                    try await $0.writeLsK3SleepFactor(k3SleepFactor)
+                }
             }
 
             self.lsVmin = vmin
@@ -613,6 +652,44 @@ final class ConnectionViewModel: ObservableObject {
             trace("mode retry reconnect success")
         } catch {
             trace("mode retry reconnect failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func performLsWriteStep(
+        _ label: String,
+        operation: @escaping @Sendable (TAC5Repository) async throws -> Void
+    ) async throws {
+        guard let repository else { throw ModbusError.connectionClosed }
+
+        do {
+            trace("ls write step start field=\(label)")
+            try await operation(repository)
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            trace("ls write step success field=\(label)")
+        } catch {
+            guard isTransientModeError(error) else {
+                trace("ls write step failed field=\(label) error=\(error.localizedDescription)")
+                throw error
+            }
+
+            trace("ls write step transient field=\(label) error=\(error.localizedDescription); retrying once")
+            await reconnectAfterTransientModeError()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            guard let retryRepository = self.repository else {
+                trace("ls write step retry unavailable field=\(label)")
+                throw ModbusError.connectionClosed
+            }
+
+            do {
+                trace("ls write step retry start field=\(label)")
+                try await operation(retryRepository)
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                trace("ls write step retry success field=\(label)")
+            } catch {
+                trace("ls write step retry failed field=\(label) error=\(error.localizedDescription)")
+                throw error
+            }
         }
     }
 
