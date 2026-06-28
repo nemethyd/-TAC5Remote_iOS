@@ -56,7 +56,7 @@ final class ConnectionViewModel: ObservableObject {
         do {
             connection = try parseConnectionTarget()
         } catch {
-            statusText = "Invalid connection format. Example: 192.168.10.80:502:1"
+            statusText = "Invalid connection format. Use IP, IP:Port, IP::Unit, or IP:Port:Unit"
             trace("connect failed: invalid connection format: \(connectionTarget)")
             return
         }
@@ -520,10 +520,18 @@ final class ConnectionViewModel: ObservableObject {
             try await performLsWriteStep("K3Mode") {
                 try await $0.writeLsK3Mode(mode)
             }
-            lsK3Mode = mode
-            if let readBack = try? await repository.readLsK3Mode() {
-                lsK3Mode = readBack
+
+            let confirmed = await readLsK3ModeConfirmed(from: repository, expected: mode)
+            if confirmed != mode {
+                if let confirmed {
+                    lsK3Mode = confirmed
+                }
+                statusText = "LS K3 mode mismatch after write"
+                trace("ls k3 mode mismatch expected=\(mode.label) actual=\(confirmed?.label ?? "nil")")
+                return
             }
+
+            lsK3Mode = mode
             statusText = "LS K3 mode: \(lsK3Mode.label)"
             trace("ls k3 mode write success value=\(lsK3Mode.label)")
         } catch {
@@ -612,9 +620,28 @@ final class ConnectionViewModel: ObservableObject {
             .split(separator: ":", omittingEmptySubsequences: false)
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
 
-        guard parts.count == 3, !parts[0].isEmpty else { throw ModbusError.invalidResponse }
-        guard let port = UInt16(parts[1]), let unitId = UInt8(parts[2]) else { throw ModbusError.invalidResponse }
-        return (host: parts[0], port: port, unitId: unitId)
+        guard !parts.isEmpty, !parts[0].isEmpty else { throw ModbusError.invalidResponse }
+        guard parts.count <= 3 else { throw ModbusError.invalidResponse }
+
+        let host = parts[0]
+
+        let port: UInt16
+        if parts.count >= 2, !parts[1].isEmpty {
+            guard let parsedPort = UInt16(parts[1]) else { throw ModbusError.invalidResponse }
+            port = parsedPort
+        } else {
+            port = 502
+        }
+
+        let unitId: UInt8
+        if parts.count == 3, !parts[2].isEmpty {
+            guard let parsedUnitId = UInt8(parts[2]) else { throw ModbusError.invalidResponse }
+            unitId = parsedUnitId
+        } else {
+            unitId = 1
+        }
+
+        return (host: host, port: port, unitId: unitId)
     }
 
     private func isTransientPresetError(_ error: Error) -> Bool {
@@ -717,6 +744,22 @@ final class ConnectionViewModel: ObservableObject {
         }
     }
 
+    private func readLsK3ModeConfirmed(from repository: TAC5Repository, expected: TAC5LSK3Mode) async -> TAC5LSK3Mode? {
+        var lastRead: TAC5LSK3Mode?
+
+        for _ in 0..<3 {
+            if let readBack = try? await repository.readLsK3Mode() {
+                lastRead = readBack
+                if readBack == expected {
+                    return readBack
+                }
+            }
+            try? await Task.sleep(nanoseconds: 120_000_000)
+        }
+
+        return lastRead
+    }
+
     private func initializeTraceLog() {
         guard let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
             return
@@ -797,22 +840,19 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .disabled(viewModel.isBusy)
 
-                    Button("Close") {
-                        Task {
-                            if viewModel.isConnected {
-                                await viewModel.disconnect()
-                            }
-                            let didClose = await MainActor.run { closeApplication() }
-                            if !didClose {
-                                await MainActor.run {
-                                    viewModel.statusText = "Disconnected. iOS may not allow app close from button."
+                    if supportsInAppClose {
+                        Button("Quit") {
+                            Task {
+                                if viewModel.isConnected {
+                                    await viewModel.disconnect()
                                 }
+                                _ = await MainActor.run { closeApplication() }
                             }
                         }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-                    .frame(maxWidth: .infinity)
                 }
 
                 HStack {
@@ -946,6 +986,14 @@ struct ContentView: View {
     private func valueText(_ value: Double?, suffix: String) -> String {
         guard let value else { return "-" }
         return String(format: "%.1f%@", value, suffix)
+    }
+
+    private var supportsInAppClose: Bool {
+#if targetEnvironment(macCatalyst)
+        return true
+#else
+        return false
+#endif
     }
 
     private func closeApplication() -> Bool {
@@ -1102,6 +1150,16 @@ private struct ExhaustSupplyRatioEditor: View {
             Text("Current: \(currentText)")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer(minLength: 0)
+                Button("Apply now") {
+                    applyRatio()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+            }
         }
         .padding(.vertical, 4)
         .onChange(of: isRatioFocused) { isFocused in
@@ -1185,6 +1243,16 @@ private struct CAModeParametersEditor: View {
             Text("CA values are auto-applied when a field loses focus.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer(minLength: 0)
+                Button("Apply now") {
+                    applyAirflowValues()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+            }
         }
         .padding(.vertical, 4)
         .onChange(of: focusedField) { newValue in
@@ -1286,6 +1354,7 @@ private struct LSModeParametersEditor: View {
     @State private var stopIfBelowVlow: Bool
     @State private var stopIfAboveVhigh: Bool
     @State private var k3Mode: TAC5LSK3Mode
+    @State private var suppressK3AutoApply = false
     @State private var lastFocusedField: LSField?
     @FocusState private var focusedField: LSField?
 
@@ -1342,6 +1411,10 @@ private struct LSModeParametersEditor: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: k3Mode) { _ in
+                if suppressK3AutoApply {
+                    suppressK3AutoApply = false
+                    return
+                }
                 applyK3ModeOnly()
             }
 
@@ -1354,6 +1427,16 @@ private struct LSModeParametersEditor: View {
             Text("LS values are auto-applied when a field loses focus.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer(minLength: 0)
+                Button("Apply now") {
+                    applyLsSettings()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+            }
         }
         .padding(.vertical, 4)
         .onChange(of: focusedField) { newValue in
@@ -1364,6 +1447,7 @@ private struct LSModeParametersEditor: View {
         }
         .onChange(of: viewModel.lsK3Mode) { newValue in
             if k3Mode != newValue {
+                suppressK3AutoApply = true
                 k3Mode = newValue
             }
         }
