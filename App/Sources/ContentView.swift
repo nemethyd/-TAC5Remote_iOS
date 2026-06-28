@@ -8,6 +8,9 @@ import UIKit
 @MainActor
 final class ConnectionViewModel: ObservableObject {
     private let exhaustSupplyRatioLimits = 50...200
+    private let lsVoltageLimits = 0...100
+    private let lsAirflowLimits = 100...840
+    private let lsSleepFactorLimits = 0...100
 
     @Published var connectionTarget = "192.168.10.80:502:1"
     @Published var statusText = "Disconnected"
@@ -20,6 +23,16 @@ final class ConnectionViewModel: ObservableObject {
     @Published var caAirflowI: UInt16?
     @Published var caAirflowII: UInt16?
     @Published var caAirflowIII: UInt16?
+    @Published var lsVmin: UInt16?
+    @Published var lsVmax: UInt16?
+    @Published var lsAirflowAtVmin: UInt16?
+    @Published var lsAirflowAtVmax: UInt16?
+    @Published var lsStopIfBelowVlow = false
+    @Published var lsVlow: UInt16?
+    @Published var lsStopIfAboveVhigh = false
+    @Published var lsVhigh: UInt16?
+    @Published var lsK3Mode: TAC5LSK3Mode = .no
+    @Published var lsK3SleepFactor: UInt16?
     @Published var operationMode: TAC5OperationMode = .ca
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
@@ -73,6 +86,16 @@ final class ConnectionViewModel: ObservableObject {
             let caAirflowI = try? await repository.readCaAirflowI()
             let caAirflowII = try? await repository.readCaAirflowII()
             let caAirflowIII = try? await repository.readCaAirflowIII()
+            let lsVmin = try? await repository.readLsVmin()
+            let lsVmax = try? await repository.readLsVmax()
+            let lsAirflowAtVmin = try? await repository.readLsAirflowAtVmin()
+            let lsAirflowAtVmax = try? await repository.readLsAirflowAtVmax()
+            let lsStopIfBelowVlow = try? await repository.readLsStopIfBelowVlow()
+            let lsVlow = try? await repository.readLsVlow()
+            let lsStopIfAboveVhigh = try? await repository.readLsStopIfAboveVhigh()
+            let lsVhigh = try? await repository.readLsVhigh()
+            let lsK3Mode = try? await repository.readLsK3Mode()
+            let lsK3SleepFactor = try? await repository.readLsK3SleepFactor()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -96,6 +119,36 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let caAirflowIII {
                 self.caAirflowIII = caAirflowIII
+            }
+            if let lsVmin {
+                self.lsVmin = lsVmin
+            }
+            if let lsVmax {
+                self.lsVmax = lsVmax
+            }
+            if let lsAirflowAtVmin {
+                self.lsAirflowAtVmin = lsAirflowAtVmin
+            }
+            if let lsAirflowAtVmax {
+                self.lsAirflowAtVmax = lsAirflowAtVmax
+            }
+            if let lsStopIfBelowVlow {
+                self.lsStopIfBelowVlow = lsStopIfBelowVlow
+            }
+            if let lsVlow {
+                self.lsVlow = lsVlow
+            }
+            if let lsStopIfAboveVhigh {
+                self.lsStopIfAboveVhigh = lsStopIfAboveVhigh
+            }
+            if let lsVhigh {
+                self.lsVhigh = lsVhigh
+            }
+            if let lsK3Mode {
+                self.lsK3Mode = lsK3Mode
+            }
+            if let lsK3SleepFactor {
+                self.lsK3SleepFactor = lsK3SleepFactor
             }
             if let mode {
                 self.operationMode = mode
@@ -130,6 +183,16 @@ final class ConnectionViewModel: ObservableObject {
             let caAirflowI = try? await repository.readCaAirflowI()
             let caAirflowII = try? await repository.readCaAirflowII()
             let caAirflowIII = try? await repository.readCaAirflowIII()
+            let lsVmin = try? await repository.readLsVmin()
+            let lsVmax = try? await repository.readLsVmax()
+            let lsAirflowAtVmin = try? await repository.readLsAirflowAtVmin()
+            let lsAirflowAtVmax = try? await repository.readLsAirflowAtVmax()
+            let lsStopIfBelowVlow = try? await repository.readLsStopIfBelowVlow()
+            let lsVlow = try? await repository.readLsVlow()
+            let lsStopIfAboveVhigh = try? await repository.readLsStopIfAboveVhigh()
+            let lsVhigh = try? await repository.readLsVhigh()
+            let lsK3Mode = try? await repository.readLsK3Mode()
+            let lsK3SleepFactor = try? await repository.readLsK3SleepFactor()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -151,6 +214,36 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let caAirflowIII {
                 self.caAirflowIII = caAirflowIII
+            }
+            if let lsVmin {
+                self.lsVmin = lsVmin
+            }
+            if let lsVmax {
+                self.lsVmax = lsVmax
+            }
+            if let lsAirflowAtVmin {
+                self.lsAirflowAtVmin = lsAirflowAtVmin
+            }
+            if let lsAirflowAtVmax {
+                self.lsAirflowAtVmax = lsAirflowAtVmax
+            }
+            if let lsStopIfBelowVlow {
+                self.lsStopIfBelowVlow = lsStopIfBelowVlow
+            }
+            if let lsVlow {
+                self.lsVlow = lsVlow
+            }
+            if let lsStopIfAboveVhigh {
+                self.lsStopIfAboveVhigh = lsStopIfAboveVhigh
+            }
+            if let lsVhigh {
+                self.lsVhigh = lsVhigh
+            }
+            if let lsK3Mode {
+                self.lsK3Mode = lsK3Mode
+            }
+            if let lsK3SleepFactor {
+                self.lsK3SleepFactor = lsK3SleepFactor
             }
             if let mode {
                 self.operationMode = mode
@@ -307,6 +400,72 @@ final class ConnectionViewModel: ObservableObject {
         } catch {
             statusText = "CA airflow write failed: \(error.localizedDescription)"
             trace("ca airflow write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func setLsSettings(
+        vmin: UInt16,
+        vmax: UInt16,
+        airflowAtVmin: UInt16,
+        airflowAtVmax: UInt16,
+        stopIfBelowVlow: Bool,
+        vlow: UInt16,
+        stopIfAboveVhigh: Bool,
+        vhigh: UInt16,
+        k3Mode: TAC5LSK3Mode,
+        k3SleepFactor: UInt16
+    ) async {
+        guard !isBusy, isConnected, let repository else { return }
+        guard lsVoltageLimits.contains(Int(vmin)), lsVoltageLimits.contains(Int(vmax)) else {
+            statusText = "LS voltages must be between 0.0 V and 10.0 V"
+            return
+        }
+        guard lsVoltageLimits.contains(Int(vlow)), lsVoltageLimits.contains(Int(vhigh)) else {
+            statusText = "LS thresholds must be between 0.0 V and 10.0 V"
+            return
+        }
+        guard lsAirflowLimits.contains(Int(airflowAtVmin)), lsAirflowLimits.contains(Int(airflowAtVmax)) else {
+            statusText = "LS airflow values must be between 100 and 840"
+            return
+        }
+        guard lsSleepFactorLimits.contains(Int(k3SleepFactor)) else {
+            statusText = "Sleep factor must be between 0 and 100"
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            try await repository.writeLsVmin(vmin)
+            try await repository.writeLsVmax(vmax)
+            try await repository.writeLsAirflowAtVmin(airflowAtVmin)
+            try await repository.writeLsAirflowAtVmax(airflowAtVmax)
+            try await repository.writeLsStopIfBelowVlow(stopIfBelowVlow)
+            try await repository.writeLsVlow(vlow)
+            try await repository.writeLsStopIfAboveVhigh(stopIfAboveVhigh)
+            try await repository.writeLsVhigh(vhigh)
+            try await repository.writeLsK3Mode(k3Mode)
+            if k3Mode == .no {
+                try await repository.writeLsK3SleepFactor(k3SleepFactor)
+            }
+
+            self.lsVmin = vmin
+            self.lsVmax = vmax
+            self.lsAirflowAtVmin = airflowAtVmin
+            self.lsAirflowAtVmax = airflowAtVmax
+            self.lsStopIfBelowVlow = stopIfBelowVlow
+            self.lsVlow = vlow
+            self.lsStopIfAboveVhigh = stopIfAboveVhigh
+            self.lsVhigh = vhigh
+            self.lsK3Mode = k3Mode
+            self.lsK3SleepFactor = k3SleepFactor
+            statusText = "LS settings updated"
+            trace("ls settings write success")
+        } catch {
+            statusText = "LS settings write failed: \(error.localizedDescription)"
+            trace("ls settings write failed: \(error.localizedDescription)")
         }
     }
 
@@ -751,10 +910,13 @@ private struct SettingsView: View {
     @ViewBuilder
     private var modeParametersSection: some View {
         Section("Mode Parameters") {
-            ExhaustSupplyRatioEditor(viewModel: viewModel)
-
             if viewModel.operationMode == .ca {
-                CAModeParametersEditor(viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 12) {
+                    ExhaustSupplyRatioEditor(viewModel: viewModel)
+                    CAModeParametersEditor(viewModel: viewModel)
+                }
+            } else if viewModel.operationMode == .ls {
+                LSModeParametersEditor(viewModel: viewModel)
             } else {
                 Text("No mapped editable parameters for \(viewModel.operationMode.label) yet.")
                     .font(.footnote)
@@ -965,6 +1127,137 @@ private struct CAModeParametersEditor: View {
         Task {
             await viewModel.setCaAirflowSetpoints(airflowI, airflowII, airflowIII)
         }
+    }
+}
+
+private struct LSModeParametersEditor: View {
+    @ObservedObject var viewModel: ConnectionViewModel
+    @State private var vminText: String
+    @State private var vmaxText: String
+    @State private var airflowAtVminText: String
+    @State private var airflowAtVmaxText: String
+    @State private var vlowText: String
+    @State private var vhighText: String
+    @State private var k3SleepFactorText: String
+    @State private var stopIfBelowVlow: Bool
+    @State private var stopIfAboveVhigh: Bool
+    @State private var k3Mode: TAC5LSK3Mode
+
+    init(viewModel: ConnectionViewModel) {
+        self.viewModel = viewModel
+        _vminText = State(initialValue: Self.voltageText(viewModel.lsVmin ?? 0))
+        _vmaxText = State(initialValue: Self.voltageText(viewModel.lsVmax ?? 100))
+        _airflowAtVminText = State(initialValue: String(viewModel.lsAirflowAtVmin ?? 100))
+        _airflowAtVmaxText = State(initialValue: String(viewModel.lsAirflowAtVmax ?? 840))
+        _vlowText = State(initialValue: Self.voltageText(viewModel.lsVlow ?? 0))
+        _vhighText = State(initialValue: Self.voltageText(viewModel.lsVhigh ?? 100))
+        _k3SleepFactorText = State(initialValue: String(viewModel.lsK3SleepFactor ?? 100))
+        _stopIfBelowVlow = State(initialValue: viewModel.lsStopIfBelowVlow)
+        _stopIfAboveVhigh = State(initialValue: viewModel.lsStopIfAboveVhigh)
+        _k3Mode = State(initialValue: viewModel.lsK3Mode)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Input")
+                    .font(.caption.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Value")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 96, alignment: .center)
+            }
+
+            lsValueRow(title: "Vmin", text: $vminText, suffix: "V")
+            lsValueRow(title: "Vmax", text: $vmaxText, suffix: "V")
+            lsValueRow(title: "Airflow @Vmin", text: $airflowAtVminText, suffix: "m3/h")
+            lsValueRow(title: "Airflow @Vmax", text: $airflowAtVmaxText, suffix: "m3/h")
+
+            Toggle("Stop fans if V < Vlow", isOn: $stopIfBelowVlow)
+            lsValueRow(title: "Vlow", text: $vlowText, suffix: "V")
+
+            Toggle("Stop fans if V > Vhigh", isOn: $stopIfAboveVhigh)
+            lsValueRow(title: "Vhigh", text: $vhighText, suffix: "V")
+
+            Picker("0-10V on K3", selection: $k3Mode) {
+                ForEach(TAC5LSK3Mode.allCases, id: \.label) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            ExhaustSupplyRatioEditor(viewModel: viewModel)
+
+            if k3Mode == .no {
+                lsValueRow(title: "% on K3 (sleep factor)", text: $k3SleepFactorText, suffix: "%")
+            }
+
+            Button("Apply LS settings") {
+                applyLsSettings()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.isConnected || viewModel.isBusy)
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func lsValueRow(title: String, text: Binding<String>, suffix: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            TextField(title, text: text)
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 96)
+
+            Text(suffix)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+        }
+    }
+
+    private func applyLsSettings() {
+        guard
+            let vmin = Self.parseVoltage(vminText),
+            let vmax = Self.parseVoltage(vmaxText),
+            let airflowAtVmin = UInt16(airflowAtVminText.trimmingCharacters(in: .whitespacesAndNewlines)),
+            let airflowAtVmax = UInt16(airflowAtVmaxText.trimmingCharacters(in: .whitespacesAndNewlines)),
+            let vlow = Self.parseVoltage(vlowText),
+            let vhigh = Self.parseVoltage(vhighText),
+            let k3SleepFactor = UInt16(k3SleepFactorText.trimmingCharacters(in: .whitespacesAndNewlines))
+        else {
+            viewModel.statusText = "LS values must be numeric"
+            return
+        }
+
+        Task {
+            await viewModel.setLsSettings(
+                vmin: vmin,
+                vmax: vmax,
+                airflowAtVmin: airflowAtVmin,
+                airflowAtVmax: airflowAtVmax,
+                stopIfBelowVlow: stopIfBelowVlow,
+                vlow: vlow,
+                stopIfAboveVhigh: stopIfAboveVhigh,
+                vhigh: vhigh,
+                k3Mode: k3Mode,
+                k3SleepFactor: k3SleepFactor
+            )
+        }
+    }
+
+    private static func parseVoltage(_ text: String) -> UInt16? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(trimmed) else { return nil }
+        let scaled = (value * 10.0).rounded()
+        guard scaled >= 0, scaled <= 100 else { return nil }
+        return UInt16(scaled)
+    }
+
+    private static func voltageText(_ rawValue: UInt16) -> String {
+        String(format: "%.1f", Double(rawValue) / 10.0)
     }
 }
 

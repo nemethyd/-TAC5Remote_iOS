@@ -6,11 +6,23 @@ T4,41004,int16,ro,0.1,C,alias to T7 in app mapping
 SUPPLY_AIRFLOW,41010,uint16,ro,1,m3_h,confirmed live read
 EXHAUST_AIRFLOW,41011,uint16,ro,1,m3_h,confirmed live read
 WORKING_MODE,42001,uint16,rw,1,enum,confirmed from repeated behavior/capture; vendor mapping pending
-PRESET_WRITE_TRIGGER,raw:199,uint16,rw,1,trigger,FC06: write 0 before each preset change
-RATIO_EXH_SUP,TBD,uint16,rw,0.01,ratio,capture-verified write target at raw offset 426; vendor address pending
-AIRFLOW_I,42003,uint16,rw,1,m3_h,likely confirmed from behavior
-AIRFLOW_II,42004,uint16,rw,1,m3_h,likely confirmed from behavior
 PRESET_STATE,42005,uint16,rw,1,enum,K1=1; K2=2; K3=3 (confirmed)
 OPERATION_MODE,raw:425,uint16,rw,1,enum,confirmed: OFF=0; CA=1; LS=2; CP=4; value 3 unknown
 BYPASS_ENABLE,raw:222,uint16,rw,1,bool_like,FC06 write observed: 1=Bypass on; 0=Bypass off; document address TBD
 BOOST_ENABLE,raw:227,uint16,rw,1,bool_like,FC06 write observed: 1=Boost on; 0=Boost off; document address TBD
+PRESET_WRITE_TRIGGER,raw:199,uint16,rw,1,trigger,FC06: write 0 before each preset change
+RATIO_EXH_SUP,TBD,uint16,rw,0.01,ratio,capture-verified write target at raw offset 426; vendor address pending
+AIRFLOW_I,TBD,uint16,rw,1,m3_h,confirmed CA mode supply setpoint I at raw offset 427
+AIRFLOW_II,TBD,uint16,rw,1,m3_h,confirmed CA mode supply setpoint II at raw offset 428
+AIRFLOW_III,TBD,uint16,rw,1,m3_h,confirmed CA mode supply setpoint III at raw offset 429
+LS_VMIN,TBD,uint16,rw,0.1,V,confirmed LS mode Vmin at raw offset 437; 0.9 V -> 9
+LS_VMAX,TBD,uint16,rw,0.1,V,confirmed LS mode Vmax at raw offset 438; 9.5 V -> 95; 10.0 V -> 100
+LS_AIRFLOW_AT_VMIN,TBD,uint16,rw,1,m3_h,confirmed LS airflow at Vmin at raw offset 439
+LS_AIRFLOW_AT_VMAX,TBD,uint16,rw,1,m3_h,confirmed LS airflow at Vmax at raw offset 440
+LS_STOP_IF_BELOW_VLOW,TBD,uint16,rw,1,bool_like,confirmed LS low-threshold stop enable at raw offset 500
+LS_VLOW,TBD,uint16,rw,0.1,V,confirmed LS low stop threshold at raw offset 501; 0.5 V -> 5
+LS_STOP_IF_ABOVE_VHIGH,TBD,uint16,rw,1,bool_like,confirmed LS high-threshold stop enable at raw offset 502
+LS_VHIGH,TBD,uint16,rw,0.1,V,confirmed LS high stop threshold at raw offset 503; 9.5 V -> 95; 10.0 V -> 100
+LS_K3_010V_ENABLE,TBD,uint16,rw,1,bool_like,confirmed K3 0-10V master enable at raw offset 504; clean capture showed 0=No and 1=enabled
+LS_K3_SLEEP_FACTOR,TBD,uint16,rw,1,percent,likely confirmed K3 sleep factor at raw offset 441; Eole emitted intermediate 1 before final writes 90 and 100
+LS_K3_TARGET_SIDE,TBD,uint16,rw,1,enum,confirmed K3 target-side selector at raw offset 583; clean capture showed 0=Exhaust and 1=Supply

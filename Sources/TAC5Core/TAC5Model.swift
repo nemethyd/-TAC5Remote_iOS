@@ -81,6 +81,20 @@ public enum TAC5OperationMode: UInt16, CaseIterable, Sendable {
     }
 }
 
+public enum TAC5LSK3Mode: Sendable, CaseIterable {
+    case no
+    case exhaust
+    case supply
+
+    public var label: String {
+        switch self {
+        case .no: return "No"
+        case .exhaust: return "Exhaust"
+        case .supply: return "Supply"
+        }
+    }
+}
+
 public struct TAC5Codec {
     public init() {}
 
@@ -98,6 +112,18 @@ public struct TAC5Codec {
 public actor TAC5Repository {
     private let client: ModbusTCPClient
     private let codec = TAC5Codec()
+
+    private let lsVminRegister: UInt16 = 437
+    private let lsVmaxRegister: UInt16 = 438
+    private let lsAirflowAtVminRegister: UInt16 = 439
+    private let lsAirflowAtVmaxRegister: UInt16 = 440
+    private let lsK3SleepFactorRegister: UInt16 = 441
+    private let lsStopIfBelowVlowRegister: UInt16 = 500
+    private let lsVlowRegister: UInt16 = 501
+    private let lsStopIfAboveVhighRegister: UInt16 = 502
+    private let lsVhighRegister: UInt16 = 503
+    private let lsK3EnableRegister: UInt16 = 504
+    private let lsK3TargetSideRegister: UInt16 = 583
 
     public init(client: ModbusTCPClient) {
         self.client = client
@@ -180,6 +206,110 @@ public actor TAC5Repository {
 
     public func writeCaAirflowIII(_ value: UInt16) async throws {
         try await client.writeSingleRegister(address: TAC5Register.caAirflowIII.rawValue, value: value)
+    }
+
+    public func readLsVmin() async throws -> UInt16? {
+        try await readRegister(lsVminRegister)
+    }
+
+    public func readLsVmax() async throws -> UInt16? {
+        try await readRegister(lsVmaxRegister)
+    }
+
+    public func readLsAirflowAtVmin() async throws -> UInt16? {
+        try await readRegister(lsAirflowAtVminRegister)
+    }
+
+    public func readLsAirflowAtVmax() async throws -> UInt16? {
+        try await readRegister(lsAirflowAtVmaxRegister)
+    }
+
+    public func readLsK3SleepFactor() async throws -> UInt16? {
+        try await readRegister(lsK3SleepFactorRegister)
+    }
+
+    public func readLsStopIfBelowVlow() async throws -> Bool? {
+        guard let raw = try await readRegister(lsStopIfBelowVlowRegister) else {
+            return nil
+        }
+        return raw == 1
+    }
+
+    public func readLsVlow() async throws -> UInt16? {
+        try await readRegister(lsVlowRegister)
+    }
+
+    public func readLsStopIfAboveVhigh() async throws -> Bool? {
+        guard let raw = try await readRegister(lsStopIfAboveVhighRegister) else {
+            return nil
+        }
+        return raw == 1
+    }
+
+    public func readLsVhigh() async throws -> UInt16? {
+        try await readRegister(lsVhighRegister)
+    }
+
+    public func readLsK3Mode() async throws -> TAC5LSK3Mode? {
+        guard let enabledRaw = try await readRegister(lsK3EnableRegister) else {
+            return nil
+        }
+        guard enabledRaw != 0 else {
+            return .no
+        }
+        let targetRaw = try await readRegister(lsK3TargetSideRegister) ?? 0
+        return targetRaw == 0 ? .exhaust : .supply
+    }
+
+    public func writeLsVmin(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: lsVminRegister, value: value)
+    }
+
+    public func writeLsVmax(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: lsVmaxRegister, value: value)
+    }
+
+    public func writeLsAirflowAtVmin(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: lsAirflowAtVminRegister, value: value)
+    }
+
+    public func writeLsAirflowAtVmax(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: lsAirflowAtVmaxRegister, value: value)
+    }
+
+    public func writeLsK3SleepFactor(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: lsK3SleepFactorRegister, value: value)
+    }
+
+    public func writeLsStopIfBelowVlow(_ enabled: Bool) async throws {
+        try await client.writeSingleRegister(address: lsStopIfBelowVlowRegister, value: enabled ? 1 : 0)
+    }
+
+    public func writeLsVlow(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: lsVlowRegister, value: value)
+    }
+
+    public func writeLsStopIfAboveVhigh(_ enabled: Bool) async throws {
+        try await client.writeSingleRegister(address: lsStopIfAboveVhighRegister, value: enabled ? 1 : 0)
+    }
+
+    public func writeLsVhigh(_ value: UInt16) async throws {
+        try await client.writeSingleRegister(address: lsVhighRegister, value: value)
+    }
+
+    public func writeLsK3Mode(_ mode: TAC5LSK3Mode) async throws {
+        switch mode {
+        case .no:
+            try await client.writeSingleRegister(address: lsK3EnableRegister, value: 0)
+        case .exhaust:
+            try await client.writeSingleRegister(address: lsK3EnableRegister, value: 1)
+            try await Task.sleep(nanoseconds: 40_000_000)
+            try await client.writeSingleRegister(address: lsK3TargetSideRegister, value: 0)
+        case .supply:
+            try await client.writeSingleRegister(address: lsK3EnableRegister, value: 1)
+            try await Task.sleep(nanoseconds: 40_000_000)
+            try await client.writeSingleRegister(address: lsK3TargetSideRegister, value: 1)
+        }
     }
 
     public func readOperationMode() async throws -> TAC5OperationMode? {
