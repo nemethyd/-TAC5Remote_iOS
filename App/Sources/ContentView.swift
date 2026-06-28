@@ -14,6 +14,7 @@ final class ConnectionViewModel: ObservableObject {
     @Published var isBusy = false
     @Published var boostEnabled = false
     @Published var bypassEnabled = false
+    @Published var exhaustSupplyRatio: Double?
     @Published var operationMode: TAC5OperationMode = .ca
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
@@ -63,6 +64,7 @@ final class ConnectionViewModel: ObservableObject {
             }
             let boostState = try? await repository.readBoostEnabled()
             let bypassState = try? await repository.readBypassEnabled()
+            let ratioState = try? await repository.readExhaustSupplyRatio()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -74,6 +76,9 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let bypassState {
                 self.bypassEnabled = bypassState
+            }
+            if let ratioState {
+                self.exhaustSupplyRatio = Double(ratioState)
             }
             if let mode {
                 self.operationMode = mode
@@ -104,6 +109,7 @@ final class ConnectionViewModel: ObservableObject {
             let freshSnapshot = try await repository.readSnapshot()
             let boostState = try? await repository.readBoostEnabled()
             let bypassState = try? await repository.readBypassEnabled()
+            let ratioState = try? await repository.readExhaustSupplyRatio()
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
@@ -113,6 +119,9 @@ final class ConnectionViewModel: ObservableObject {
             }
             if let bypassState {
                 self.bypassEnabled = bypassState
+            }
+            if let ratioState {
+                self.exhaustSupplyRatio = Double(ratioState)
             }
             if let mode {
                 self.operationMode = mode
@@ -125,6 +134,9 @@ final class ConnectionViewModel: ObservableObject {
             }
             if updateStatus {
                 statusText = "Refreshed"
+            }
+            if let ratioState {
+                trace("monitor 426 ratio=\(ratioState)")
             }
             trace("refresh success")
         } catch {
@@ -222,6 +234,29 @@ final class ConnectionViewModel: ObservableObject {
         } catch {
             statusText = "Bypass write failed: \(error.localizedDescription)"
             trace("bypass write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func setExhaustSupplyRatio(_ ratioPercent: UInt16) async {
+        guard !isBusy, isConnected, let repository else { return }
+        guard ratioPercent <= 100 else {
+            statusText = "Ratio must be between 0 and 100"
+            trace("ratio write rejected: out of range value=\(ratioPercent)")
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+        suppressRefreshUntil = Date().addingTimeInterval(2.0)
+
+        do {
+            try await repository.writeExhaustSupplyRatio(ratioPercent)
+            exhaustSupplyRatio = Double(ratioPercent)
+            statusText = "Ratio: \(ratioPercent)%"
+            trace("ratio write success value=\(ratioPercent)")
+        } catch {
+            statusText = "Ratio write failed: \(error.localizedDescription)"
+            trace("ratio write failed: \(error.localizedDescription)")
         }
     }
 
@@ -516,6 +551,8 @@ struct ContentView: View {
                     .disabled(!viewModel.isConnected || viewModel.isBusy)
                 }
 
+                ExhaustSupplyRatioEditor(viewModel: viewModel)
+
                 if viewModel.traceEnabled {
                     HStack {
                         if let traceURL = viewModel.traceLogURL {
@@ -666,6 +703,8 @@ private struct SettingsView: View {
     @ViewBuilder
     private var modeParametersSection: some View {
         Section("Mode Parameters") {
+            ExhaustSupplyRatioEditor(viewModel: viewModel)
+
             if viewModel.operationMode == .ca {
                 CAModeParametersPreview()
             } else {
@@ -714,6 +753,65 @@ private struct SettingsView: View {
             Button("Done") {
                 dismiss()
             }
+        }
+    }
+}
+
+private struct ExhaustSupplyRatioEditor: View {
+    @ObservedObject var viewModel: ConnectionViewModel
+    @State private var ratioText: String
+
+    init(viewModel: ConnectionViewModel) {
+        self.viewModel = viewModel
+        let initialValue = Int(viewModel.exhaustSupplyRatio ?? 100)
+        _ratioText = State(initialValue: String(initialValue))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Exhaust / Supply Ratio")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                TextField("0-100", text: $ratioText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 110)
+
+                Text("%")
+                    .foregroundStyle(.secondary)
+
+                Button("Apply") {
+                    applyRatio()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+
+                Spacer(minLength: 0)
+            }
+
+            Text("Current: \(currentText)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var currentText: String {
+        guard let value = viewModel.exhaustSupplyRatio else { return "-" }
+        return String(format: "%.0f%%", value)
+    }
+
+    private func applyRatio() {
+        let trimmed = ratioText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = UInt16(trimmed), value <= 100 else {
+            viewModel.statusText = "Ratio must be between 0 and 100"
+            return
+        }
+
+        Task {
+            await viewModel.setExhaustSupplyRatio(value)
         }
     }
 }

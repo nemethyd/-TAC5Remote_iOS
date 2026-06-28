@@ -25,7 +25,7 @@ Important indexing note:
 | EXHAUST_AIRFLOW | 72 | 41011 | ro | uint16 | 1 | m3_h | confirmed | live exhaust airflow |
 | WORKING_MODE | 52 | 42001 | rw | uint16 | 1 | enum | likely confirmed | active mode / preset index; K1=1, K2=2, K3=3, Boost observed as 1/3 transition |
 | PRESET_WRITE_TRIGGER | 199 | - | rw | uint16 | 1 | trigger | confirmed | FC06 writes 0 before each preset change |
-| RATIO_EXH_SUP | 53 | 42002 | rw | uint16 | 0.01 | ratio | likely confirmed | tracks preset / boost setpoint block |
+| RATIO_EXH_SUP | 426 | TBD | rw | uint16 | 0.01 | ratio | likely confirmed | capture-verified write target for exhaust/supply ratio; app writes directly to this register |
 | AIRFLOW_I | 55 | 42003 | rw | uint16 | 1 | m3_h | likely confirmed | K1 preset value observed at 200, Boost at 840 |
 | AIRFLOW_II | 56 | 42004 | rw | uint16 | 1 | m3_h | likely confirmed | K2 preset value observed at 300, Boost at 840 |
 | PRESET_STATE | 202 | 42005 | rw | uint16 | 1 | enum | confirmed | K1=1, K2=2, K3=3 |
@@ -47,6 +47,8 @@ Important indexing note:
   - OFF: 227=0
 - Operation mode transitions (capture: mode_off_ca_ls_cp_confirm.pcapng):
   - OFF -> CA -> LS -> CP -> OFF produced 425 values: 0 -> 1 -> 2 -> 4 -> 0
+- Exhaust/supply ratio edit (capture: ratio_test_100_90_80_100.pcapng):
+  - FC06 writes observed at 426 with values 90, 80, and 100 during manual ratio edits
 
 ## Observed runtime behavior
 
@@ -75,6 +77,5 @@ Important indexing note:
 
 - Whether 52 is strictly the active preset index or a broader working mode selector.
 - Whether register 52 mirrors active preset for all firmware variants.
-- Whether AIRFLOW_I / II / III are three editable setpoints or a shared block with one active selector.
 - Whether Boost is a dedicated mode bit or an alternate setpoint profile.
 - What OPERATION_MODE value 3 means (currently unobserved; planned experiment).
