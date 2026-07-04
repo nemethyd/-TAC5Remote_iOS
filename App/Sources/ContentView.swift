@@ -968,130 +968,133 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                TextField("Example: 192.168.10.80:502:1", text: $viewModel.connectionTarget)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .textFieldStyle(.roundedBorder)
+            ScrollView {
+                VStack(spacing: 12) {
+                    TextField("Example: 192.168.10.80:502:1", text: $viewModel.connectionTarget)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .textFieldStyle(.roundedBorder)
 
-                HStack {
-                    Button(viewModel.isConnected ? "Disconnect" : "Connect") {
-                        if viewModel.isConnected {
-                            Task { await viewModel.disconnect() }
-                        } else {
-                            Task { await viewModel.connect() }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-                    .disabled(viewModel.isBusy)
-
-                    if supportsInAppClose {
-                        Button("Quit") {
-                            Task {
-                                if viewModel.isConnected {
-                                    await viewModel.disconnect()
-                                }
-                                _ = await MainActor.run { closeApplication() }
+                    HStack {
+                        Button(viewModel.isConnected ? "Disconnect" : "Connect") {
+                            if viewModel.isConnected {
+                                Task { await viewModel.disconnect() }
+                            } else {
+                                Task { await viewModel.connect() }
                             }
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
+                        .buttonStyle(.borderedProminent)
                         .frame(maxWidth: .infinity)
-                    }
-                }
+                        .disabled(viewModel.isBusy)
 
-                HStack {
-                    ForEach(TAC5Preset.allCases, id: \.rawValue) { preset in
+                        if supportsInAppClose {
+                            Button("Quit") {
+                                Task {
+                                    if viewModel.isConnected {
+                                        await viewModel.disconnect()
+                                    }
+                                    _ = await MainActor.run { closeApplication() }
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.red)
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+
+                    HStack {
+                        ForEach(TAC5Preset.allCases, id: \.rawValue) { preset in
+                            Button {
+                                Task { await viewModel.setPreset(preset) }
+                            } label: {
+                                PresetButtonLabel(
+                                    preset: preset,
+                                    targetM3h: viewModel.presetTargetByPreset[preset],
+                                    isSelected: viewModel.selectedPreset == preset
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.selectedPreset == preset)
+                        }
+                    }
+
+                    HStack {
                         Button {
-                            Task { await viewModel.setPreset(preset) }
+                            Task { await viewModel.setBoostEnabled(!viewModel.boostEnabled) }
                         } label: {
-                            PresetButtonLabel(
-                                preset: preset,
-                                targetM3h: viewModel.presetTargetByPreset[preset],
-                                isSelected: viewModel.selectedPreset == preset
+                            ModeToggleLabel(
+                                title: "Boost",
+                                systemImage: "bolt.fill",
+                                isOn: viewModel.boostEnabled,
+                                accent: .green
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(!viewModel.isConnected || viewModel.isBusy || viewModel.selectedPreset == preset)
-                    }
-                }
+                        .frame(maxWidth: .infinity)
+                        .disabled(!viewModel.isConnected || viewModel.isBusy)
 
-                HStack {
-                    Button {
-                        Task { await viewModel.setBoostEnabled(!viewModel.boostEnabled) }
-                    } label: {
-                        ModeToggleLabel(
-                            title: "Boost",
-                            systemImage: "bolt.fill",
-                            isOn: viewModel.boostEnabled,
-                            accent: .green
-                        )
+                        Button {
+                            Task { await viewModel.setBypassEnabled(!viewModel.bypassEnabled) }
+                        } label: {
+                            ModeToggleLabel(
+                                title: "Bypass",
+                                systemImage: "arrow.triangle.branch",
+                                isOn: viewModel.bypassEnabled,
+                                accent: .blue
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .disabled(!viewModel.isConnected || viewModel.isBusy)
                     }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
-                    .disabled(!viewModel.isConnected || viewModel.isBusy)
 
-                    Button {
-                        Task { await viewModel.setBypassEnabled(!viewModel.bypassEnabled) }
-                    } label: {
-                        ModeToggleLabel(
-                            title: "Bypass",
-                            systemImage: "arrow.triangle.branch",
-                            isOn: viewModel.bypassEnabled,
-                            accent: .blue
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
-                    .disabled(!viewModel.isConnected || viewModel.isBusy)
-                }
+                    if viewModel.traceEnabled {
+                        HStack {
+                            if let traceURL = viewModel.traceLogURL {
+                                ShareLink(item: traceURL) {
+                                    Label("Export Trace", systemImage: "square.and.arrow.up")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .buttonStyle(.bordered)
+                            }
 
-                if viewModel.traceEnabled {
-                    HStack {
-                        if let traceURL = viewModel.traceLogURL {
-                            ShareLink(item: traceURL) {
-                                Label("Export Trace", systemImage: "square.and.arrow.up")
+                            Button("Clear Trace") {
+                                viewModel.clearTraceLog()
                             }
                             .frame(maxWidth: .infinity)
                             .buttonStyle(.bordered)
                         }
-
-                        Button("Clear Trace") {
-                            viewModel.clearTraceLog()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .buttonStyle(.bordered)
                     }
+
+                    Text(viewModel.statusText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Divider()
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        metricCard("Outdoor", valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
+                        metricCard("Supply", valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
+                        metricCard("Extract", valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
+                        metricCard("Exhaust", valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
+                        metricCard("Supply Airflow", valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
+                        metricCard("Exhaust Airflow", valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
+                    }
+
+                    Text(buildInfo)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-
-                Text(viewModel.statusText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Divider()
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    metricCard("Outdoor", valueText(viewModel.snapshot.t1Celsius, suffix: " C"))
-                    metricCard("Supply", valueText(viewModel.snapshot.t2Celsius, suffix: " C"))
-                    metricCard("Extract", valueText(viewModel.snapshot.t3Celsius, suffix: " C"))
-                    metricCard("Exhaust", valueText(viewModel.snapshot.t7Celsius, suffix: " C"))
-                    metricCard("Supply Airflow", valueText(viewModel.snapshot.supplyAirflowM3h, suffix: " m3/h"))
-                    metricCard("Exhaust Airflow", valueText(viewModel.snapshot.exhaustAirflowM3h, suffix: " m3/h"))
-                }
-
-                Spacer(minLength: 0)
-
-                Text(buildInfo)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(16)
+            .scrollIndicators(.hidden)
             .navigationTitle("TAC5 Remote")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -1111,6 +1114,7 @@ struct ContentView: View {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     await viewModel.refresh(updateStatus: false)
                 }
+            }
             }
         }
     }
