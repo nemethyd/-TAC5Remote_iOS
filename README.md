@@ -1,6 +1,6 @@
 # TAC5 Remote iOS
 
-Modern iOS client foundation for TAC5-compatible units over Modbus TCP.
+Modern iOS client foundation for TAC5-compatible units over Modbus TCP.OK térjünk vissza 
 
 ## What this repo is
 
