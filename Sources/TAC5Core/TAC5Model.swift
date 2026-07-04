@@ -31,6 +31,34 @@ public struct TAC5Snapshot: Sendable {
     }
 }
 
+public struct TAC5ClockSettings: Sendable {
+    public var seconds: UInt16
+    public var minutes: UInt16
+    public var hours: UInt16
+    public var dayOfMonth: UInt16
+    public var month: UInt16
+    public var year: UInt16
+    public var dayOfWeek: UInt16
+
+    public init(
+        seconds: UInt16,
+        minutes: UInt16,
+        hours: UInt16,
+        dayOfMonth: UInt16,
+        month: UInt16,
+        year: UInt16,
+        dayOfWeek: UInt16
+    ) {
+        self.seconds = seconds
+        self.minutes = minutes
+        self.hours = hours
+        self.dayOfMonth = dayOfMonth
+        self.month = month
+        self.year = year
+        self.dayOfWeek = dayOfWeek
+    }
+}
+
 public enum TAC5Register: UInt16, CaseIterable {
     // Validated against live Mural dump (zero-based Modbus offsets).
     case t7 = 8
@@ -142,6 +170,7 @@ public actor TAC5Repository {
     private let lsVhighRegister: UInt16 = 503
     private let lsK3EnableRegister: UInt16 = 504
     private let lsK3TargetSideRegister: UInt16 = 583
+    private let rtcSecondsRegister: UInt16 = 399
 
     public init(client: ModbusTCPClient) {
         self.client = client
@@ -308,6 +337,25 @@ public actor TAC5Repository {
 
     public func readLsK3TargetSideRaw() async throws -> UInt16? {
         try await readRegister(lsK3TargetSideRegister)
+    }
+
+    public func readClockSettings() async throws -> TAC5ClockSettings? {
+        let regs = try await client.readHoldingRegisters(startAddress: rtcSecondsRegister, quantity: 7)
+        guard regs.count == 7 else { return nil }
+        return TAC5ClockSettings(
+            seconds: regs[0],
+            minutes: regs[1],
+            hours: regs[2],
+            dayOfMonth: regs[3],
+            month: regs[4],
+            year: regs[5],
+            dayOfWeek: regs[6]
+        )
+    }
+
+    public func writeClockSettings(seconds: UInt16, minutes: UInt16, hours: UInt16, dayOfMonth: UInt16, month: UInt16, year: UInt16) async throws {
+        let values = [seconds, minutes, hours, dayOfMonth, month, year]
+        try await client.writeMultipleRegisters(startAddress: rtcSecondsRegister, values: values)
     }
 
     public func writeLsVmin(_ value: UInt16) async throws {

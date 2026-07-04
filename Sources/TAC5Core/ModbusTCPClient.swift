@@ -61,6 +61,13 @@ public actor ModbusTCPClient {
         _ = try parseWriteSingleResponse(response: response)
     }
 
+    public func writeMultipleRegisters(startAddress: UInt16, values: [UInt16]) async throws {
+        guard !values.isEmpty, values.count <= 123 else { throw ModbusError.invalidResponse }
+        let pdu = buildWriteMultiplePDU(startAddress: startAddress, values: values)
+        let response = try await exchange(pdu: pdu)
+        _ = try parseWriteMultipleResponse(response: response, startAddress: startAddress, quantity: UInt16(values.count))
+    }
+
     public func disconnect() {
 #if canImport(Network)
         connection?.cancel()
@@ -247,6 +254,20 @@ public actor ModbusTCPClient {
         return d
     }
 
+    private func buildWriteMultiplePDU(startAddress: UInt16, values: [UInt16]) -> Data {
+        var d = Data([0x10])
+        d.append(contentsOf: [UInt8(startAddress >> 8), UInt8(startAddress & 0xFF)])
+
+        let quantity = UInt16(values.count)
+        d.append(contentsOf: [UInt8(quantity >> 8), UInt8(quantity & 0xFF)])
+        d.append(UInt8(values.count * 2))
+
+        for value in values {
+            d.append(contentsOf: [UInt8(value >> 8), UInt8(value & 0xFF)])
+        }
+        return d
+    }
+
     private func parseReadHoldingResponse(response: Data, quantity: UInt16) throws -> [UInt16] {
         guard response.count >= 2 else { throw ModbusError.invalidResponse }
         let fn = response[0]
@@ -276,6 +297,22 @@ public actor ModbusTCPClient {
             throw ModbusError.exception(code: response[1])
         }
         guard fn == 0x06 else { throw ModbusError.invalidResponse }
+        return true
+    }
+
+    private func parseWriteMultipleResponse(response: Data, startAddress: UInt16, quantity: UInt16) throws -> Bool {
+        guard response.count >= 5 else { throw ModbusError.invalidResponse }
+        let fn = response[0]
+        if fn == 0x90 {
+            throw ModbusError.exception(code: response[1])
+        }
+        guard fn == 0x10 else { throw ModbusError.invalidResponse }
+
+        let echoedAddress = (UInt16(response[1]) << 8) | UInt16(response[2])
+        let echoedQuantity = (UInt16(response[3]) << 8) | UInt16(response[4])
+        guard echoedAddress == startAddress, echoedQuantity == quantity else {
+            throw ModbusError.invalidResponse
+        }
         return true
     }
 

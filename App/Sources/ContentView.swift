@@ -38,6 +38,8 @@ final class ConnectionViewModel: ObservableObject {
     @Published var cpExhaustVoltage: UInt16?
     @Published var cpStartAirflow: UInt16?
     @Published var operationMode: TAC5OperationMode = .ca
+    @Published var deviceClockDate: Date?
+    @Published var deviceClockWeekday: UInt16?
     @Published var selectedPreset: TAC5Preset = .k1
     @Published var presetTargetByPreset: [TAC5Preset: UInt16] = [:]
     @Published var traceLogURL: URL?
@@ -107,6 +109,7 @@ final class ConnectionViewModel: ObservableObject {
             let mode = try? await repository.readOperationMode()
             let preset = try? await repository.readPreset()
             let activeTarget = try? await repository.readActivePresetTargetAirflow()
+            let clockSettings = try? await repository.readClockSettings()
             self.client = client
             self.repository = repository
             self.snapshot = freshSnapshot
@@ -179,6 +182,9 @@ final class ConnectionViewModel: ObservableObject {
                 if let activeTarget {
                     self.presetTargetByPreset[preset] = activeTarget
                 }
+            }
+            if let clockSettings {
+                self.applyClockSettings(clockSettings)
             }
             self.isConnected = true
             self.statusText = "Connected"
@@ -315,6 +321,8 @@ final class ConnectionViewModel: ObservableObject {
         boostEnabled = false
         bypassEnabled = false
         operationMode = .ca
+        deviceClockDate = nil
+        deviceClockWeekday = nil
         selectedPreset = .k1
         presetTargetByPreset = [:]
         statusText = "Disconnected"
@@ -713,6 +721,79 @@ final class ConnectionViewModel: ObservableObject {
         }
     }
 
+    func refreshClockFromController() async {
+        guard !isBusy, isConnected, let repository else { return }
+
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            guard let settings = try await repository.readClockSettings() else {
+                statusText = "Clock read failed: no data"
+                trace("clock read failed: empty response")
+                return
+            }
+            applyClockSettings(settings)
+            statusText = "Clock refreshed"
+            trace("clock read success h=\(settings.hours) m=\(settings.minutes) s=\(settings.seconds) d=\(settings.dayOfMonth) mo=\(settings.month) y=\(settings.year)")
+        } catch {
+            statusText = "Clock read failed: \(error.localizedDescription)"
+            trace("clock read failed: \(error.localizedDescription)")
+        }
+    }
+
+    func applyControllerClock(date: Date) async {
+        guard !isBusy, isConnected, let repository else { return }
+
+        let calendar = Calendar.current
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        guard
+            let year = comps.year,
+            let month = comps.month,
+            let day = comps.day,
+            let hour = comps.hour,
+            let minute = comps.minute,
+            let second = comps.second,
+            (2000...2099).contains(year),
+            (1...12).contains(month),
+            (1...31).contains(day),
+            (0...23).contains(hour),
+            (0...59).contains(minute),
+            (0...59).contains(second)
+        else {
+            statusText = "Clock write failed: invalid date"
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            try await repository.writeClockSettings(
+                seconds: UInt16(second),
+                minutes: UInt16(minute),
+                hours: UInt16(hour),
+                dayOfMonth: UInt16(day),
+                month: UInt16(month),
+                year: UInt16(year)
+            )
+
+            if let readBack = try? await repository.readClockSettings() {
+                applyClockSettings(readBack)
+            }
+
+            statusText = "Clock updated"
+            trace("clock write success h=\(hour) m=\(minute) s=\(second) d=\(day) mo=\(month) y=\(year)")
+        } catch {
+            statusText = "Clock write failed: \(error.localizedDescription)"
+            trace("clock write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func synchronizeClockWithMobileDevice() async {
+        await applyControllerClock(date: Date())
+    }
+
     func clearTraceLog() {
         guard let traceLogURL else { return }
         do {
@@ -731,6 +812,20 @@ final class ConnectionViewModel: ObservableObject {
         if enabled {
             trace("trace logging enabled")
         }
+    }
+
+    private func applyClockSettings(_ settings: TAC5ClockSettings) {
+        let components = DateComponents(
+            calendar: Calendar.current,
+            year: Int(settings.year),
+            month: Int(settings.month),
+            day: Int(settings.dayOfMonth),
+            hour: Int(settings.hours),
+            minute: Int(settings.minutes),
+            second: Int(settings.seconds)
+        )
+        deviceClockDate = components.date
+        deviceClockWeekday = settings.dayOfWeek
     }
 
     private func withConnectTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
@@ -1169,20 +1264,44 @@ struct ContentView: View {
 }
 
 private struct SettingsView: View {
+    private enum SettingsTab: String, CaseIterable {
+        case general = "Setup"
+        case timetable = "Timetable"
+    }
+
     @ObservedObject var viewModel: ConnectionViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedTab: SettingsTab = .general
 
     var body: some View {
         NavigationStack {
             Form {
-                tracingSection
-                operationModeSection
-                modeParametersSection
+                settingsTabSection
+
+                if selectedTab == .general {
+                    tracingSection
+                    operationModeSection
+                    clockSection
+                    modeParametersSection
+                } else {
+                    timetableSection
+                }
             }
             .navigationTitle("Settings")
             .toolbar {
                 doneToolbarItem
             }
+        }
+    }
+
+    private var settingsTabSection: some View {
+        Section {
+            Picker("Area", selection: $selectedTab) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
         }
     }
 
@@ -1210,6 +1329,12 @@ private struct SettingsView: View {
         }
     }
 
+    private var clockSection: some View {
+        Section("Clock Settings") {
+            ClockSettingsEditor(viewModel: viewModel)
+        }
+    }
+
     @ViewBuilder
     private var modeParametersSection: some View {
         Section("Mode Parameters") {
@@ -1227,6 +1352,12 @@ private struct SettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var timetableSection: some View {
+        Section("Week / Year Planner") {
+            TimetableSettingsEditor(viewModel: viewModel)
         }
     }
 
@@ -1267,6 +1398,245 @@ private struct SettingsView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Button("Done") {
                 dismiss()
+            }
+        }
+    }
+}
+
+private struct ClockSettingsEditor: View {
+    @ObservedObject var viewModel: ConnectionViewModel
+    @State private var draftDate = Date()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Controller")
+                    .frame(width: 90, alignment: .leading)
+                Text(controllerDateText)
+                    .font(.body.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            if let weekday = viewModel.deviceClockWeekday {
+                Text("Weekday: \(weekdayLabel(for: weekday))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            DatePicker("Set time", selection: $draftDate, displayedComponents: [.date, .hourAndMinute])
+
+            HStack {
+                Button("Refresh") {
+                    Task { await viewModel.refreshClockFromController() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+
+                Spacer(minLength: 0)
+
+                Button("Apply selected date/time") {
+                    Task { await viewModel.applyControllerClock(date: draftDate) }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+            }
+
+            Button("Synchronize") {
+                Task { await viewModel.synchronizeClockWithMobileDevice() }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.isConnected || viewModel.isBusy)
+
+            Text("Sync writes a single 6-register RTC block (seconds, minutes, hours, day, month, year).")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+        .onAppear {
+            if let controllerDate = viewModel.deviceClockDate {
+                draftDate = controllerDate
+            }
+        }
+        .onChange(of: viewModel.deviceClockDate) { newValue in
+            if let newValue {
+                draftDate = newValue
+            }
+        }
+    }
+
+    private var controllerDateText: String {
+        guard let controllerDate = viewModel.deviceClockDate else { return "-" }
+        return Self.controllerDateFormatter.string(from: controllerDate)
+    }
+
+    private func weekdayLabel(for value: UInt16) -> String {
+        switch value {
+        case 0: return "Monday"
+        case 1: return "Tuesday"
+        case 2: return "Wednesday"
+        case 3: return "Thursday"
+        case 4: return "Friday"
+        case 5: return "Saturday"
+        case 6: return "Sunday"
+        default: return "Unknown (\(value))"
+        }
+    }
+
+    private static let controllerDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter
+    }()
+}
+
+private struct TimetableSettingsEditor: View {
+    private enum PlannerTab: String, CaseIterable {
+        case week = "Week planner"
+        case year = "Year planner"
+    }
+
+    private enum BypassMode: String, CaseIterable {
+        case auto = "AUTO"
+        case on = "ON"
+        case off = "OFF"
+    }
+
+    @ObservedObject var viewModel: ConnectionViewModel
+    @State private var plannerTab: PlannerTab = .week
+    @State private var selectedWeekday = 1
+    @State private var selectedSlot = 1
+    @State private var slotTime = Date()
+    @State private var slotMode: TAC5OperationMode = .ca
+    @State private var supplyAirflowText = "400"
+    @State private var exhaustAirflowText = "400"
+    @State private var bypassMode: BypassMode = .auto
+    @State private var disableBypass = false
+    @State private var disablePostHeating = false
+    @State private var disablePostCooling = false
+
+    private let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("Planner", selection: $plannerTab) {
+                ForEach(PlannerTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if plannerTab == .week {
+                weekPlannerEditor
+            } else {
+                yearPlannerEditor
+            }
+
+            Text("Planner fields are currently local draft values. Register mapping for timetable write/read is not finalized yet.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var weekPlannerEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Day")
+                    .frame(width: 68, alignment: .leading)
+
+                Picker("Day", selection: $selectedWeekday) {
+                    ForEach(0..<weekdays.count, id: \.self) { index in
+                        Text(weekdays[index]).tag(index + 1)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Spacer(minLength: 0)
+
+                Text("Slot")
+                    .foregroundStyle(.secondary)
+
+                Picker("Slot", selection: $selectedSlot) {
+                    ForEach(1...6, id: \.self) { slot in
+                        Text(String(slot)).tag(slot)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            HStack(spacing: 8) {
+                DatePicker("Time", selection: $slotTime, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+
+                Picker("Mode", selection: $slotMode) {
+                    ForEach(TAC5OperationMode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            HStack(spacing: 8) {
+                TextField("Supply", text: $supplyAirflowText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("m3/h")
+                    .foregroundStyle(.secondary)
+
+                TextField("Exhaust", text: $exhaustAirflowText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("m3/h")
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker("Bypass", selection: $bypassMode) {
+                ForEach(BypassMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            HStack {
+                Button("Save day draft") {
+                    viewModel.statusText = "Week planner draft updated (Day \(selectedWeekday), Slot \(selectedSlot))"
+                }
+                .buttonStyle(.bordered)
+
+                Spacer(minLength: 0)
+
+                Button("Apply to controller") {
+                    viewModel.statusText = "Timetable write mapping is not enabled yet"
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
+            }
+        }
+    }
+
+    private var yearPlannerEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle("Disable bypass", isOn: $disableBypass)
+            Toggle("Disable post-heating", isOn: $disablePostHeating)
+            Toggle("Disable post-cooling", isOn: $disablePostCooling)
+
+            HStack {
+                Button("Save year draft") {
+                    viewModel.statusText = "Year planner draft updated"
+                }
+                .buttonStyle(.bordered)
+
+                Spacer(minLength: 0)
+
+                Button("Apply year settings") {
+                    viewModel.statusText = "Year planner write mapping is not enabled yet"
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.isConnected || viewModel.isBusy)
             }
         }
     }
