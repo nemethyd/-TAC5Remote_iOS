@@ -1092,7 +1092,6 @@ struct ContentView: View {
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollIndicators(.hidden)
             .navigationTitle("TAC5 Remote")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1114,7 +1113,6 @@ struct ContentView: View {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     await viewModel.refresh(updateStatus: false)
                 }
-            }
             }
         }
     }
