@@ -17,6 +17,7 @@ final class ConnectionViewModel: ObservableObject {
     @Published var snapshot = TAC5Snapshot()
     @Published var isConnected = false
     @Published var isBusy = false
+    @Published var isConnecting = false
     @Published var boostEnabled = false
     @Published var bypassEnabled = false
     @Published var exhaustSupplyRatio: Double?
@@ -57,7 +58,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func connect() async {
-        guard !isBusy else { return }
+        guard !isBusy, !isConnecting else { return }
         let connection: (host: String, port: UInt16, unitId: UInt8)
         do {
             connection = try parseConnectionTarget()
@@ -68,133 +69,159 @@ final class ConnectionViewModel: ObservableObject {
         }
 
         isBusy = true
-        defer { isBusy = false }
+        isConnecting = true
+        defer {
+            isBusy = false
+            isConnecting = false
+        }
         statusText = "Connecting..."
         trace("connect start host=\(connection.host) port=\(connection.port) unit=\(connection.unitId)")
 
-        let config = ModbusTCPConfig(
-            host: connection.host,
-            port: connection.port,
-            unitId: connection.unitId,
-            timeoutSeconds: 3
-        )
+        await client?.disconnect()
+        client = nil
+        repository = nil
 
-        let client = ModbusTCPClient(config: config)
-        let repository = TAC5Repository(client: client)
+        let maxAttempts = 3
+        var lastError: Error?
 
-        do {
-            let freshSnapshot = try await withConnectTimeout(seconds: 8) {
-                try await repository.readSnapshot()
-            }
-            let boostRaw = try? await repository.readBoostRaw()
-            let bypassState = try? await repository.readBypassEnabled()
-            let ratioState = try? await repository.readExhaustSupplyRatio()
-            let caAirflowI = try? await repository.readCaAirflowI()
-            let caAirflowII = try? await repository.readCaAirflowII()
-            let caAirflowIII = try? await repository.readCaAirflowIII()
-            let lsVmin = try? await repository.readLsVmin()
-            let lsVmax = try? await repository.readLsVmax()
-            let lsAirflowAtVmin = try? await repository.readLsAirflowAtVmin()
-            let lsAirflowAtVmax = try? await repository.readLsAirflowAtVmax()
-            let lsStopIfBelowVlow = try? await repository.readLsStopIfBelowVlow()
-            let lsVlow = try? await repository.readLsVlow()
-            let lsStopIfAboveVhigh = try? await repository.readLsStopIfAboveVhigh()
-            let lsVhigh = try? await repository.readLsVhigh()
-            let lsK3Mode = try? await repository.readLsK3Mode()
-            let lsK3SleepFactor = try? await repository.readLsK3SleepFactor()
-            let cpOnMode = try? await repository.readCpOnMode()
-            let cpSupplyVoltage = try? await repository.readCpSupplyVoltage()
-            let cpExhaustVoltage = try? await repository.readCpExhaustVoltage()
-            let cpStartAirflow = try? await repository.readCpStartAirflow()
-            let mode = try? await repository.readOperationMode()
-            let preset = try? await repository.readPreset()
-            let activeTarget = try? await repository.readActivePresetTargetAirflow()
-            let clockSettings = try? await repository.readClockSettings()
-            self.client = client
-            self.repository = repository
-            self.snapshot = freshSnapshot
-            if let boostRaw {
-                self.boostEnabled = boostRaw != 0
-                trace("monitor 227 boost=\(boostRaw)")
-            }
-            if let bypassState {
-                self.bypassEnabled = bypassState
-            }
-            if let ratioState {
-                self.exhaustSupplyRatio = Double(ratioState)
-            }
-            if let caAirflowI {
-                self.caAirflowI = caAirflowI
-            }
-            if let caAirflowII {
-                self.caAirflowII = caAirflowII
-            }
-            if let caAirflowIII {
-                self.caAirflowIII = caAirflowIII
-            }
-            if let lsVmin {
-                self.lsVmin = lsVmin
-            }
-            if let lsVmax {
-                self.lsVmax = lsVmax
-            }
-            if let lsAirflowAtVmin {
-                self.lsAirflowAtVmin = lsAirflowAtVmin
-            }
-            if let lsAirflowAtVmax {
-                self.lsAirflowAtVmax = lsAirflowAtVmax
-            }
-            if let lsStopIfBelowVlow {
-                self.lsStopIfBelowVlow = lsStopIfBelowVlow
-            }
-            if let lsVlow {
-                self.lsVlow = lsVlow
-            }
-            if let lsStopIfAboveVhigh {
-                self.lsStopIfAboveVhigh = lsStopIfAboveVhigh
-            }
-            if let lsVhigh {
-                self.lsVhigh = lsVhigh
-            }
-            if let lsK3Mode {
-                self.lsK3Mode = lsK3Mode
-            }
-            if let lsK3SleepFactor {
-                self.lsK3SleepFactor = lsK3SleepFactor
-            }
-            if let cpOnMode {
-                self.cpOnMode = cpOnMode
-            }
-            if let cpSupplyVoltage {
-                self.cpSupplyVoltage = cpSupplyVoltage
-            }
-            if let cpExhaustVoltage {
-                self.cpExhaustVoltage = cpExhaustVoltage
-            }
-            if let cpStartAirflow {
-                self.cpStartAirflow = cpStartAirflow
-            }
-            if let mode {
-                self.operationMode = mode
-            }
-            if let preset {
-                self.selectedPreset = preset
-                if let activeTarget {
-                    self.presetTargetByPreset[preset] = activeTarget
+        for attempt in 1...maxAttempts {
+            statusText = "Connecting... (\(attempt)/\(maxAttempts))"
+
+            let config = ModbusTCPConfig(
+                host: connection.host,
+                port: connection.port,
+                unitId: connection.unitId,
+                timeoutSeconds: 3
+            )
+
+            let attemptClient = ModbusTCPClient(config: config)
+            let attemptRepository = TAC5Repository(client: attemptClient)
+
+            do {
+                let timeout = 8.0 + (Double(attempt - 1) * 2.0)
+                let freshSnapshot = try await withConnectTimeout(seconds: timeout) {
+                    try await attemptRepository.readSnapshot()
+                }
+                let boostRaw = try? await attemptRepository.readBoostRaw()
+                let bypassState = try? await attemptRepository.readBypassEnabled()
+                let ratioState = try? await attemptRepository.readExhaustSupplyRatio()
+                let caAirflowI = try? await attemptRepository.readCaAirflowI()
+                let caAirflowII = try? await attemptRepository.readCaAirflowII()
+                let caAirflowIII = try? await attemptRepository.readCaAirflowIII()
+                let lsVmin = try? await attemptRepository.readLsVmin()
+                let lsVmax = try? await attemptRepository.readLsVmax()
+                let lsAirflowAtVmin = try? await attemptRepository.readLsAirflowAtVmin()
+                let lsAirflowAtVmax = try? await attemptRepository.readLsAirflowAtVmax()
+                let lsStopIfBelowVlow = try? await attemptRepository.readLsStopIfBelowVlow()
+                let lsVlow = try? await attemptRepository.readLsVlow()
+                let lsStopIfAboveVhigh = try? await attemptRepository.readLsStopIfAboveVhigh()
+                let lsVhigh = try? await attemptRepository.readLsVhigh()
+                let lsK3Mode = try? await attemptRepository.readLsK3Mode()
+                let lsK3SleepFactor = try? await attemptRepository.readLsK3SleepFactor()
+                let cpOnMode = try? await attemptRepository.readCpOnMode()
+                let cpSupplyVoltage = try? await attemptRepository.readCpSupplyVoltage()
+                let cpExhaustVoltage = try? await attemptRepository.readCpExhaustVoltage()
+                let cpStartAirflow = try? await attemptRepository.readCpStartAirflow()
+                let mode = try? await attemptRepository.readOperationMode()
+                let preset = try? await attemptRepository.readPreset()
+                let activeTarget = try? await attemptRepository.readActivePresetTargetAirflow()
+                let clockSettings = try? await attemptRepository.readClockSettings()
+
+                self.client = attemptClient
+                self.repository = attemptRepository
+                self.snapshot = freshSnapshot
+                if let boostRaw {
+                    self.boostEnabled = boostRaw != 0
+                    trace("monitor 227 boost=\(boostRaw)")
+                }
+                if let bypassState {
+                    self.bypassEnabled = bypassState
+                }
+                if let ratioState {
+                    self.exhaustSupplyRatio = Double(ratioState)
+                }
+                if let caAirflowI {
+                    self.caAirflowI = caAirflowI
+                }
+                if let caAirflowII {
+                    self.caAirflowII = caAirflowII
+                }
+                if let caAirflowIII {
+                    self.caAirflowIII = caAirflowIII
+                }
+                if let lsVmin {
+                    self.lsVmin = lsVmin
+                }
+                if let lsVmax {
+                    self.lsVmax = lsVmax
+                }
+                if let lsAirflowAtVmin {
+                    self.lsAirflowAtVmin = lsAirflowAtVmin
+                }
+                if let lsAirflowAtVmax {
+                    self.lsAirflowAtVmax = lsAirflowAtVmax
+                }
+                if let lsStopIfBelowVlow {
+                    self.lsStopIfBelowVlow = lsStopIfBelowVlow
+                }
+                if let lsVlow {
+                    self.lsVlow = lsVlow
+                }
+                if let lsStopIfAboveVhigh {
+                    self.lsStopIfAboveVhigh = lsStopIfAboveVhigh
+                }
+                if let lsVhigh {
+                    self.lsVhigh = lsVhigh
+                }
+                if let lsK3Mode {
+                    self.lsK3Mode = lsK3Mode
+                }
+                if let lsK3SleepFactor {
+                    self.lsK3SleepFactor = lsK3SleepFactor
+                }
+                if let cpOnMode {
+                    self.cpOnMode = cpOnMode
+                }
+                if let cpSupplyVoltage {
+                    self.cpSupplyVoltage = cpSupplyVoltage
+                }
+                if let cpExhaustVoltage {
+                    self.cpExhaustVoltage = cpExhaustVoltage
+                }
+                if let cpStartAirflow {
+                    self.cpStartAirflow = cpStartAirflow
+                }
+                if let mode {
+                    self.operationMode = mode
+                }
+                if let preset {
+                    self.selectedPreset = preset
+                    if let activeTarget {
+                        self.presetTargetByPreset[preset] = activeTarget
+                    }
+                }
+                if let clockSettings {
+                    self.applyClockSettings(clockSettings)
+                }
+
+                self.isConnected = true
+                self.statusText = "Connected"
+                trace("connect success attempt=\(attempt)")
+                return
+            } catch {
+                lastError = error
+                trace("connect attempt \(attempt) failed: \(error.localizedDescription)")
+                await attemptClient.disconnect()
+
+                if attempt < maxAttempts {
+                    try? await Task.sleep(nanoseconds: UInt64(Double(attempt) * 350_000_000))
                 }
             }
-            if let clockSettings {
-                self.applyClockSettings(clockSettings)
-            }
-            self.isConnected = true
-            self.statusText = "Connected"
-            trace("connect success")
-        } catch {
-            self.statusText = "Connect/read failed: \(error.localizedDescription)"
-            trace("connect failed: \(error.localizedDescription)")
-            await client.disconnect()
-            self.isConnected = false
         }
+
+        self.isConnected = false
+        self.statusText = "Connect/read failed: \((lastError ?? ModbusError.connectionFailed).localizedDescription)"
+        trace("connect failed after retries: \((lastError ?? ModbusError.connectionFailed).localizedDescription)")
     }
 
     func refresh(updateStatus: Bool = true) async {
@@ -318,6 +345,7 @@ final class ConnectionViewModel: ObservableObject {
         client = nil
         repository = nil
         isConnected = false
+        isConnecting = false
         boostEnabled = false
         bypassEnabled = false
         operationMode = .ca
@@ -1080,7 +1108,7 @@ struct ContentView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .frame(maxWidth: .infinity)
-                        .disabled(viewModel.isBusy)
+                        .disabled(viewModel.isConnected ? viewModel.isBusy : viewModel.isConnecting)
 
                         if supportsInAppClose {
                             Button("Quit") {
