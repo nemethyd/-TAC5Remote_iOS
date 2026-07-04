@@ -60,7 +60,7 @@ $iface = Resolve-Interface -Preferred $Interface
 $filter = "host $TargetHost and tcp port $Port"
 $outFile = Join-Path $CaptureDir "modbus_watch.pcapng"
 
-$args = @(
+$tsharkArgs = @(
     "-i", $iface,
     "-n",
     "-f", $filter,
@@ -69,7 +69,7 @@ $args = @(
     "-w", $outFile
 )
 
-$proc = Start-Process -FilePath $tsharkPath -ArgumentList $args -PassThru -WindowStyle Hidden
+$proc = Start-Process -FilePath $tsharkPath -ArgumentList $tsharkArgs -PassThru -WindowStyle Hidden
 
 $state = [pscustomobject]@{
     pid = $proc.Id

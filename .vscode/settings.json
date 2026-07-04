@@ -1,0 +1,9 @@
+{
+  "swift.excludePathsFromActivation": {
+    "**": true
+  },
+  "swift.disableSwiftlyInstallPrompt": true,
+  "swift.ignoreSwiftVersionFile": true,
+  "swift.sourcekit-lsp.disable": true,
+  "swift.disableSwiftPackageManagerIntegration": true
+}
