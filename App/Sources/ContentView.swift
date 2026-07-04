@@ -220,8 +220,9 @@ final class ConnectionViewModel: ObservableObject {
         }
 
         self.isConnected = false
-        self.statusText = "Connect/read failed: \((lastError ?? ModbusError.connectionFailed).localizedDescription)"
-        trace("connect failed after retries: \((lastError ?? ModbusError.connectionFailed).localizedDescription)")
+        let failureDescription = lastError?.localizedDescription ?? ModbusError.connectionFailed.localizedDescription
+        self.statusText = "Connect/read failed: \(failureDescription)"
+        trace("connect failed after retries: \(failureDescription)")
     }
 
     func refresh(updateStatus: Bool = true) async {
