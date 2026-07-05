@@ -1089,6 +1089,20 @@ final class ConnectionViewModel: ObservableObject {
             return nil
         }
     }
+
+    private func tracedRead<T>(_ label: String, _ operation: () async throws -> T?) async -> T? {
+        let start = Date()
+        do {
+            let result = try await operation()
+            let elapsed = Date().timeIntervalSince(start)
+            trace("read \(label) ok (\(String(format: "%.2f", elapsed))s) value=\(String(describing: result))")
+            return result
+        } catch {
+            let elapsed = Date().timeIntervalSince(start)
+            trace("read \(label) FAILED (\(String(format: "%.2f", elapsed))s) error=\(error.localizedDescription)")
+            return nil
+        }
+    }
 }
 
 
