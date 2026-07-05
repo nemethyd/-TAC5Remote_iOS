@@ -220,7 +220,7 @@ final class ConnectionViewModel: ObservableObject {
         }
 
         self.isConnected = false
-        let failureDescription = lastError?.localizedDescription ?? ModbusError.connectionFailed.localizedDescription
+        let failureDescription = lastError?.localizedDescription ?? "Connection failed"
         self.statusText = "Connect/read failed: \(failureDescription)"
         trace("connect failed after retries: \(failureDescription)")
     }
