@@ -58,7 +58,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func connect() async {
-        guard !isBusy, !isConnecting else { return }
+        guard !isBusy, !isConnecting, !isRefreshing else { return }
         let connection: (host: String, port: UInt16, unitId: UInt8)
         do {
             connection = try parseConnectionTarget()
@@ -237,29 +237,29 @@ final class ConnectionViewModel: ObservableObject {
 
         do {
             let freshSnapshot = try await repository.readSnapshot()
-            let boostRaw = try? await repository.readBoostRaw()
-            let bypassState = try? await repository.readBypassEnabled()
-            let ratioState = try? await repository.readExhaustSupplyRatio()
-            let caAirflowI = try? await repository.readCaAirflowI()
-            let caAirflowII = try? await repository.readCaAirflowII()
-            let caAirflowIII = try? await repository.readCaAirflowIII()
-            let lsVmin = try? await repository.readLsVmin()
-            let lsVmax = try? await repository.readLsVmax()
-            let lsAirflowAtVmin = try? await repository.readLsAirflowAtVmin()
-            let lsAirflowAtVmax = try? await repository.readLsAirflowAtVmax()
-            let lsStopIfBelowVlow = try? await repository.readLsStopIfBelowVlow()
-            let lsVlow = try? await repository.readLsVlow()
-            let lsStopIfAboveVhigh = try? await repository.readLsStopIfAboveVhigh()
-            let lsVhigh = try? await repository.readLsVhigh()
-            let lsK3Mode = try? await repository.readLsK3Mode()
-            let lsK3SleepFactor = try? await repository.readLsK3SleepFactor()
-            let cpOnMode = try? await repository.readCpOnMode()
-            let cpSupplyVoltage = try? await repository.readCpSupplyVoltage()
-            let cpExhaustVoltage = try? await repository.readCpExhaustVoltage()
-            let cpStartAirflow = try? await repository.readCpStartAirflow()
-            let mode = try? await repository.readOperationMode()
-            let preset = try? await repository.readPreset()
-            let activeTarget = try? await repository.readActivePresetTargetAirflow()
+            let boostRaw = await pacedRead { try await repository.readBoostRaw() }
+            let bypassState = await pacedRead { try await repository.readBypassEnabled() }
+            let ratioState = await pacedRead { try await repository.readExhaustSupplyRatio() }
+            let caAirflowI = await pacedRead { try await repository.readCaAirflowI() }
+            let caAirflowII = await pacedRead { try await repository.readCaAirflowII() }
+            let caAirflowIII = await pacedRead { try await repository.readCaAirflowIII() }
+            let lsVmin = await pacedRead { try await repository.readLsVmin() }
+            let lsVmax = await pacedRead { try await repository.readLsVmax() }
+            let lsAirflowAtVmin = await pacedRead { try await repository.readLsAirflowAtVmin() }
+            let lsAirflowAtVmax = await pacedRead { try await repository.readLsAirflowAtVmax() }
+            let lsStopIfBelowVlow = await pacedRead { try await repository.readLsStopIfBelowVlow() }
+            let lsVlow = await pacedRead { try await repository.readLsVlow() }
+            let lsStopIfAboveVhigh = await pacedRead { try await repository.readLsStopIfAboveVhigh() }
+            let lsVhigh = await pacedRead { try await repository.readLsVhigh() }
+            let lsK3Mode = await pacedRead { try await repository.readLsK3Mode() }
+            let lsK3SleepFactor = await pacedRead { try await repository.readLsK3SleepFactor() }
+            let cpOnMode = await pacedRead { try await repository.readCpOnMode() }
+            let cpSupplyVoltage = await pacedRead { try await repository.readCpSupplyVoltage() }
+            let cpExhaustVoltage = await pacedRead { try await repository.readCpExhaustVoltage() }
+            let cpStartAirflow = await pacedRead { try await repository.readCpStartAirflow() }
+            let mode = await pacedRead { try await repository.readOperationMode() }
+            let preset = await pacedRead { try await repository.readPreset() }
+            let activeTarget = await pacedRead { try await repository.readActivePresetTargetAirflow() }
             snapshot = freshSnapshot
             if let boostRaw {
                 self.boostEnabled = boostRaw != 0
@@ -364,7 +364,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setBoostEnabled(_ enabled: Bool) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
         isBusy = true
         defer { isBusy = false }
 
@@ -385,7 +385,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setPreset(_ preset: TAC5Preset) async {
-        guard !isBusy, isConnected else { return }
+        guard !isBusy, !isRefreshing, isConnected else { return }
         guard selectedPreset != preset else { return }
         isBusy = true
         defer { isBusy = false }
@@ -421,7 +421,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setBypassEnabled(_ enabled: Bool) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
         isBusy = true
         defer { isBusy = false }
 
@@ -441,7 +441,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setExhaustSupplyRatio(_ ratioPercent: UInt16) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
         guard exhaustSupplyRatioLimits.contains(Int(ratioPercent)) else {
             statusText = "Ratio must be between 50 and 200"
             trace("ratio write rejected: out of range value=\(ratioPercent)")
@@ -464,7 +464,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setCaAirflowSetpoints(_ airflowI: UInt16, _ airflowII: UInt16, _ airflowIII: UInt16) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
         isBusy = true
         defer { isBusy = false }
         suppressRefreshUntil = Date().addingTimeInterval(2.0)
@@ -496,7 +496,7 @@ final class ConnectionViewModel: ObservableObject {
         k3Mode: TAC5LSK3Mode,
         k3SleepFactor: UInt16
     ) async {
-        guard !isBusy, isConnected, repository != nil else { return }
+        guard !isBusy, !isRefreshing, isConnected, repository != nil else { return }
         guard lsVoltageLimits.contains(Int(vmin)), lsVoltageLimits.contains(Int(vmax)) else {
             statusText = "LS voltages must be between 0.0 V and 10.0 V"
             return
@@ -590,7 +590,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setLsK3Mode(_ mode: TAC5LSK3Mode) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
 
         isBusy = true
         defer { isBusy = false }
@@ -623,7 +623,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setLsK3SleepFactor(_ value: UInt16) async {
-        guard !isBusy, isConnected, repository != nil else { return }
+        guard !isBusy, !isRefreshing, isConnected, repository != nil else { return }
         guard lsSleepFactorLimits.contains(Int(value)) else {
             statusText = "Sleep factor must be between 0 and 100"
             return
@@ -648,7 +648,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setCpOnMode(_ mode: TAC5CPOnMode) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
 
         isBusy = true
         defer { isBusy = false }
@@ -670,7 +670,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setCpSupplyVoltage(_ value: UInt16) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
         guard lsVoltageLimits.contains(Int(value)) else {
             statusText = "CP voltage must be between 0.0 V and 10.0 V"
             return
@@ -693,7 +693,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setCpExhaustVoltage(_ value: UInt16) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
         guard lsVoltageLimits.contains(Int(value)) else {
             statusText = "CP voltage must be between 0.0 V and 10.0 V"
             return
@@ -720,7 +720,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func setOperationMode(_ mode: TAC5OperationMode) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
         guard operationMode != mode else { return }
         isBusy = true
         defer { isBusy = false }
@@ -756,7 +756,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func refreshClockFromController() async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
 
         isBusy = true
         defer { isBusy = false }
@@ -777,7 +777,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func applyControllerClock(date: Date) async {
-        guard !isBusy, isConnected, let repository else { return }
+        guard !isBusy, !isRefreshing, isConnected, let repository else { return }
 
         let calendar = Calendar.current
         let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
@@ -1078,6 +1078,14 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     private func tracedRead<T>(_ label: String, _ operation: () async throws -> T?) async -> T? {
+        // TAC5's Modbus TCP<->RTU satellite gateway appears to need a short gap between
+        // back-to-back requests; without it, some reads intermittently time out even though
+        // the device is reachable and healthy (observed: roughly a third of ~24 rapid-fire
+        // sequential reads hit the 3s timeout, alternating with sub-0.4s successes). The
+        // official Eole app paces its own writes with a similar small gap for the same reason
+        // (see writePreset()), so mirror that here for reads too.
+        try? await Task.sleep(nanoseconds: 60_000_000)
+
         let start = Date()
         do {
             let result = try await operation()
@@ -1089,6 +1097,14 @@ final class ConnectionViewModel: ObservableObject {
             trace("read \(label) FAILED (\(String(format: "%.2f", elapsed))s) error=\(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// Same short inter-request gap as tracedRead, without the verbose per-field trace
+    /// logging (used by refresh(), which polls repeatedly and would otherwise flood the
+    /// trace log with ~24 extra lines every cycle).
+    private func pacedRead<T>(_ operation: () async throws -> T?) async -> T? {
+        try? await Task.sleep(nanoseconds: 60_000_000)
+        return try? await operation()
     }
 }
 
