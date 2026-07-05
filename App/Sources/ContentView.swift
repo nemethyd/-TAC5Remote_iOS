@@ -99,33 +99,38 @@ final class ConnectionViewModel: ObservableObject {
 
             do {
                 let timeout = 8.0 + (Double(attempt - 1) * 2.0)
+                trace("attempt=\(attempt) readSnapshot start (timeout=\(timeout)s)")
+                let snapshotStart = Date()
                 let freshSnapshot = try await withConnectTimeout(seconds: timeout) {
                     try await attemptRepository.readSnapshot()
                 }
-                let boostRaw = try? await attemptRepository.readBoostRaw()
-                let bypassState = try? await attemptRepository.readBypassEnabled()
-                let ratioState = try? await attemptRepository.readExhaustSupplyRatio()
-                let caAirflowI = try? await attemptRepository.readCaAirflowI()
-                let caAirflowII = try? await attemptRepository.readCaAirflowII()
-                let caAirflowIII = try? await attemptRepository.readCaAirflowIII()
-                let lsVmin = try? await attemptRepository.readLsVmin()
-                let lsVmax = try? await attemptRepository.readLsVmax()
-                let lsAirflowAtVmin = try? await attemptRepository.readLsAirflowAtVmin()
-                let lsAirflowAtVmax = try? await attemptRepository.readLsAirflowAtVmax()
-                let lsStopIfBelowVlow = try? await attemptRepository.readLsStopIfBelowVlow()
-                let lsVlow = try? await attemptRepository.readLsVlow()
-                let lsStopIfAboveVhigh = try? await attemptRepository.readLsStopIfAboveVhigh()
-                let lsVhigh = try? await attemptRepository.readLsVhigh()
-                let lsK3Mode = try? await attemptRepository.readLsK3Mode()
-                let lsK3SleepFactor = try? await attemptRepository.readLsK3SleepFactor()
-                let cpOnMode = try? await attemptRepository.readCpOnMode()
-                let cpSupplyVoltage = try? await attemptRepository.readCpSupplyVoltage()
-                let cpExhaustVoltage = try? await attemptRepository.readCpExhaustVoltage()
-                let cpStartAirflow = try? await attemptRepository.readCpStartAirflow()
-                let mode = try? await attemptRepository.readOperationMode()
-                let preset = try? await attemptRepository.readPreset()
-                let activeTarget = try? await attemptRepository.readActivePresetTargetAirflow()
-                let clockSettings = try? await attemptRepository.readClockSettings()
+                trace("attempt=\(attempt) readSnapshot ok (\(String(format: "%.2f", Date().timeIntervalSince(snapshotStart)))s)")
+                let boostRaw = await tracedRead("boostRaw") { try await attemptRepository.readBoostRaw() }
+                let bypassState = await tracedRead("bypassState") { try await attemptRepository.readBypassEnabled() }
+                let ratioState = await tracedRead("ratioState") { try await attemptRepository.readExhaustSupplyRatio() }
+                let caAirflowI = await tracedRead("caAirflowI") { try await attemptRepository.readCaAirflowI() }
+                let caAirflowII = await tracedRead("caAirflowII") { try await attemptRepository.readCaAirflowII() }
+                let caAirflowIII = await tracedRead("caAirflowIII") { try await attemptRepository.readCaAirflowIII() }
+                let lsVmin = await tracedRead("lsVmin") { try await attemptRepository.readLsVmin() }
+                let lsVmax = await tracedRead("lsVmax") { try await attemptRepository.readLsVmax() }
+                let lsAirflowAtVmin = await tracedRead("lsAirflowAtVmin") { try await attemptRepository.readLsAirflowAtVmin() }
+                let lsAirflowAtVmax = await tracedRead("lsAirflowAtVmax") { try await attemptRepository.readLsAirflowAtVmax() }
+                let lsStopIfBelowVlow = await tracedRead("lsStopIfBelowVlow") { try await attemptRepository.readLsStopIfBelowVlow() }
+                let lsVlow = await tracedRead("lsVlow") { try await attemptRepository.readLsVlow() }
+                let lsStopIfAboveVhigh = await tracedRead("lsStopIfAboveVhigh") { try await attemptRepository.readLsStopIfAboveVhigh() }
+                let lsVhigh = await tracedRead("lsVhigh") { try await attemptRepository.readLsVhigh() }
+                let lsK3Mode = await tracedRead("lsK3Mode") { try await attemptRepository.readLsK3Mode() }
+                let lsK3SleepFactor = await tracedRead("lsK3SleepFactor") { try await attemptRepository.readLsK3SleepFactor() }
+                let cpOnMode = await tracedRead("cpOnMode") { try await attemptRepository.readCpOnMode() }
+                let cpSupplyVoltage = await tracedRead("cpSupplyVoltage") { try await attemptRepository.readCpSupplyVoltage() }
+                let cpExhaustVoltage = await tracedRead("cpExhaustVoltage") { try await attemptRepository.readCpExhaustVoltage() }
+                let cpStartAirflow = await tracedRead("cpStartAirflow") { try await attemptRepository.readCpStartAirflow() }
+                let mode = await tracedRead("operationMode") { try await attemptRepository.readOperationMode() }
+                let preset = await tracedRead("preset") { try await attemptRepository.readPreset() }
+                let activeTarget = await tracedRead("activeTarget") { try await attemptRepository.readActivePresetTargetAirflow() }
+                let clockSettings = await tracedRead("clockSettings") { try await attemptRepository.readClockSettings() }
+                trace("attempt=\(attempt) all post-snapshot reads done")
+
 
                 self.client = attemptClient
                 self.repository = attemptRepository
@@ -1070,7 +1075,22 @@ final class ConnectionViewModel: ObservableObject {
             // Keep trace logging non-fatal for app behavior.
         }
     }
+
+    private func tracedRead<T>(_ label: String, _ operation: () async throws -> T) async -> T? {
+        let start = Date()
+        do {
+            let result = try await operation()
+            let elapsed = Date().timeIntervalSince(start)
+            trace("read \(label) ok (\(String(format: "%.2f", elapsed))s) value=\(String(describing: result))")
+            return result
+        } catch {
+            let elapsed = Date().timeIntervalSince(start)
+            trace("read \(label) FAILED (\(String(format: "%.2f", elapsed))s) error=\(error.localizedDescription)")
+            return nil
+        }
+    }
 }
+
 
 struct ContentView: View {
     @StateObject private var viewModel = ConnectionViewModel()
