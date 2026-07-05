@@ -864,6 +864,8 @@ final class ConnectionViewModel: ObservableObject {
 
     private func withConnectTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
+            defer { group.cancelAll() }
+
             group.addTask {
                 try await operation()
             }
@@ -876,7 +878,6 @@ final class ConnectionViewModel: ObservableObject {
             guard let result = try await group.next() else {
                 throw ModbusError.timeout
             }
-            group.cancelAll()
             return result
         }
     }

@@ -125,24 +125,28 @@ public actor ModbusTCPClient {
         )
 
         try await withTimeout(config.timeoutSeconds) {
-            try await withCheckedThrowingContinuation { continuation in
-                newConnection.stateUpdateHandler = { state in
-                    switch state {
-                    case .ready:
-                        newConnection.stateUpdateHandler = nil
-                        continuation.resume()
-                    case .failed(let error):
-                        newConnection.stateUpdateHandler = nil
-                        continuation.resume(throwing: ModbusError.connectionFailed(String(describing: error)))
-                    case .cancelled:
-                        newConnection.stateUpdateHandler = nil
-                        continuation.resume(throwing: ModbusError.connectionClosed)
-                    default:
-                        break
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    newConnection.stateUpdateHandler = { state in
+                        switch state {
+                        case .ready:
+                            newConnection.stateUpdateHandler = nil
+                            continuation.resume()
+                        case .failed(let error):
+                            newConnection.stateUpdateHandler = nil
+                            continuation.resume(throwing: ModbusError.connectionFailed(String(describing: error)))
+                        case .cancelled:
+                            newConnection.stateUpdateHandler = nil
+                            continuation.resume(throwing: ModbusError.connectionClosed)
+                        default:
+                            break
+                        }
                     }
-                }
 
-                newConnection.start(queue: DispatchQueue.global(qos: .userInitiated))
+                    newConnection.start(queue: DispatchQueue.global(qos: .userInitiated))
+                }
+            } onCancel: {
+                newConnection.cancel()
             }
         }
 
@@ -163,14 +167,18 @@ public actor ModbusTCPClient {
 
     private func send(data: Data, on connection: NWConnection) async throws {
         try await withTimeout(config.timeoutSeconds) {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                connection.send(content: data, completion: .contentProcessed { error in
-                    if let error {
-                        continuation.resume(throwing: ModbusError.connectionFailed(String(describing: error)))
-                    } else {
-                        continuation.resume()
-                    }
-                })
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    connection.send(content: data, completion: .contentProcessed { error in
+                        if let error {
+                            continuation.resume(throwing: ModbusError.connectionFailed(String(describing: error)))
+                        } else {
+                            continuation.resume()
+                        }
+                    })
+                }
+            } onCancel: {
+                connection.cancel()
             }
         }
     }
@@ -195,25 +203,29 @@ public actor ModbusTCPClient {
     }
 
     private func receiveChunk(maxLength: Int, on connection: NWConnection) async throws -> Data {
-        try await withCheckedThrowingContinuation { continuation in
-            connection.receive(minimumIncompleteLength: 1, maximumLength: maxLength) { data, _, isComplete, error in
-                if let error {
-                    continuation.resume(throwing: ModbusError.connectionFailed(String(describing: error)))
-                    return
-                }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                connection.receive(minimumIncompleteLength: 1, maximumLength: maxLength) { data, _, isComplete, error in
+                    if let error {
+                        continuation.resume(throwing: ModbusError.connectionFailed(String(describing: error)))
+                        return
+                    }
 
-                if let data, !data.isEmpty {
-                    continuation.resume(returning: data)
-                    return
-                }
+                    if let data, !data.isEmpty {
+                        continuation.resume(returning: data)
+                        return
+                    }
 
-                if isComplete {
+                    if isComplete {
+                        continuation.resume(returning: Data())
+                        return
+                    }
+
                     continuation.resume(returning: Data())
-                    return
                 }
-
-                continuation.resume(returning: Data())
             }
+        } onCancel: {
+            connection.cancel()
         }
     }
 
@@ -222,6 +234,8 @@ public actor ModbusTCPClient {
         operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
+            defer { group.cancelAll() }
+
             group.addTask {
                 try await operation()
             }
@@ -232,9 +246,7 @@ public actor ModbusTCPClient {
                 throw ModbusError.timeout
             }
 
-            let result = try await group.next()
-            group.cancelAll()
-            guard let result else { throw ModbusError.timeout }
+            guard let result = try await group.next() else { throw ModbusError.timeout }
             return result
         }
     }
