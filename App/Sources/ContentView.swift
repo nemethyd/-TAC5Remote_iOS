@@ -1076,7 +1076,7 @@ final class ConnectionViewModel: ObservableObject {
         }
     }
 
-    private func tracedRead<T>(_ label: String, _ operation: () async throws -> T) async -> T? {
+    private func tracedRead<T>(_ label: String, _ operation: () async throws -> T?) async -> T? {
         let start = Date()
         do {
             let result = try await operation()
