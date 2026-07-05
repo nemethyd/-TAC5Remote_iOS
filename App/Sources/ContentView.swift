@@ -260,6 +260,7 @@ final class ConnectionViewModel: ObservableObject {
             let mode = await pacedRead { try await repository.readOperationMode() }
             let preset = await pacedRead { try await repository.readPreset() }
             let activeTarget = await pacedRead { try await repository.readActivePresetTargetAirflow() }
+            let clockSettings = await pacedRead { try await repository.readClockSettings() }
             snapshot = freshSnapshot
             if let boostRaw {
                 self.boostEnabled = boostRaw != 0
@@ -330,6 +331,9 @@ final class ConnectionViewModel: ObservableObject {
                 if let activeTarget {
                     self.presetTargetByPreset[preset] = activeTarget
                 }
+            }
+            if let clockSettings {
+                self.applyClockSettings(clockSettings)
             }
             if updateStatus {
                 statusText = "Refreshed"
@@ -812,8 +816,19 @@ final class ConnectionViewModel: ObservableObject {
                 year: UInt16(year)
             )
 
-            if let readBack = try? await repository.readClockSettings() {
+            // Give the Modbus gateway a short gap before the immediate readback below;
+            // without it, this read intermittently fails even though the write just
+            // succeeded, leaving the controller-time display stale (see pacedRead).
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            var readBack = try? await repository.readClockSettings()
+            if readBack == nil {
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                readBack = try? await repository.readClockSettings()
+            }
+            if let readBack {
                 applyClockSettings(readBack)
+            } else {
+                trace("clock write: readback failed after retry, display may be stale until next clock refresh")
             }
 
             statusText = "Clock updated"
