@@ -1081,7 +1081,7 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     private func tracedRead<T>(_ label: String, _ operation: () async throws -> T?) async -> T? {
-        await tracedReadCore(label, operation) ?? nil
+        await tracedReadCore(label, operation).flatMap { $0 }
     }
 
     private func tracedReadCore<T>(_ label: String, _ operation: () async throws -> T) async -> T? {
