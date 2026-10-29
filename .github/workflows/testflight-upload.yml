@@ -60,9 +60,14 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
+          set -o pipefail
           xcrun altool \
             --upload-app \
             --type ios \
             --file "$IPA_PATH" \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/altool-upload.log"
+          if grep -qE "ERROR|UPLOAD FAILED" "$RUNNER_TEMP/altool-upload.log"; then
+            echo "altool reported an upload error"
+            exit 1
+          fi
